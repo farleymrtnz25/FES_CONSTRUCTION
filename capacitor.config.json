@@ -1,0 +1,8 @@
+{
+  "appId": "com.fes.construccion",
+  "appName": "FES Construccion",
+  "webDir": "frontend/dist",
+  "server": {
+    "cleartext": true
+  }
+}

@@ -7,9 +7,13 @@
         "start": "npm start --prefix backend",
         "backend": "npm start --prefix backend",
         "frontend": "npm run dev --prefix frontend",
-        "dev": "concurrently \"npm start --prefix backend\" \"npm run dev --prefix frontend\""
+        "dev": "concurrently \"npm start --prefix backend\" \"npm run dev --prefix frontend\"",
+        "mobile:sync": "npm run build --prefix frontend && npx cap sync android"
     },
     "devDependencies": {
+        "@capacitor/android": "^8.5.2",
+        "@capacitor/cli": "^8.5.2",
+        "@capacitor/core": "^8.5.2",
         "concurrently": "^8.2.2"
     }
 }
