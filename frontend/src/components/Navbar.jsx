@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Menu, X, User, LogOut, Shield, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import logoImg from '../assets/logo.png';
 
 export default function Navbar({ activeSection, setActiveSection }) {
     const { user, logout, isAdmin } = useAuth();
@@ -37,7 +38,7 @@ export default function Navbar({ activeSection, setActiveSection }) {
                 <div className="navbar-inner">
                     {/* Logo */}
                     <button className="navbar-logo" onClick={() => navigate('inicio')} aria-label="Inicio">
-                        <img src="/src/assets/logo.png" alt="F.E.S. Construcción" onError={e => { e.target.style.display = 'none'; }} />
+                        <img src={logoImg} alt="F.E.S. Construcción" onError={e => { e.target.style.display = 'none'; }} />
                         <span className="navbar-logo-text">F.E.S. Construcción</span>
                     </button>
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Truck, Award, Leaf, Users, ArrowRight, Star, CheckCircle } from 'lucide-react';
+import heroMaterials from '../assets/hero-materials.png';
 
 export default function HeroSection({ onNavigate }) {
     return (
@@ -52,7 +53,7 @@ export default function HeroSection({ onNavigate }) {
 
                     <div className="hero-image animate-fade-in">
                         <img
-                            src="/src/assets/hero-materials.png"
+                            src={heroMaterials}
                             alt="Materiales de construcción en arcilla de F.E.S."
                         />
                         <div className="hero-image-badge">

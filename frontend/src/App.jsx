@@ -11,8 +11,10 @@ import Footer from './components/Footer';
 import AboutPage from './components/AboutPage';
 import ContactPage from './components/ContactPage';
 import LegalPage from './components/LegalPage';
+import MobileBottomNav from './components/MobileBottomNav';
 import { useAuth } from './context/AuthContext';
 import { useCart } from './context/CartContext';
+import { isMobileApp } from './config';
 
 export default function App() {
   const { user, isAdmin } = useAuth();
@@ -43,16 +45,28 @@ export default function App() {
   };
 
   return (
-    <div className="app-root">
-      <Navbar activeSection={activeSection} setActiveSection={setActiveSection} />
+    <div className={`app-root${isMobileApp ? ' mobile-app' : ''}`}>
+      {/* En mobile app: navbar simplificado; en web: navbar completo */}
+      {isMobileApp ? (
+        <header className="mobile-top-bar">
+          <span className="mobile-top-bar-title">F.E.S. Construcción</span>
+        </header>
+      ) : (
+        <Navbar activeSection={activeSection} setActiveSection={setActiveSection} />
+      )}
 
-      <main id="main-content">
+      <main id="main-content" className={isMobileApp ? 'mobile-main' : ''}>
         {renderContent()}
       </main>
 
       <CartSidebar onCheckout={() => setActiveSection('checkout')} />
 
-      <Footer onNavigate={setActiveSection} />
+      {/* En mobile app: bottom nav en lugar de footer */}
+      {isMobileApp ? (
+        <MobileBottomNav activeSection={activeSection} setActiveSection={setActiveSection} />
+      ) : (
+        <Footer onNavigate={setActiveSection} />
+      )}
 
       {/* Toast Container Placeholder */}
       <div className="toast-container" id="toast-root" />
