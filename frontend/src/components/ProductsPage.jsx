@@ -14,9 +14,22 @@ const FALLBACK = [
     { id: 8, nombre: 'Adoquín', precio: 550, medidas: 'Estándar', stock: 600, categoria: 'Especiales', imagen: 'https://placehold.co/300x200/a3a3a3/ffffff?text=Adoquin', descripcion: 'Adoquín de arcilla para pavimentación. Resistente al desgaste y clima.' },
     { id: 9, nombre: 'Teja de barro', precio: 1000, medidas: 'Estándar', stock: 450, categoria: 'Tejas', imagen: 'https://placehold.co/300x200/dc2626/ffffff?text=Teja+de+Barro', descripcion: 'Teja de barro tradicional. Excelente aislamiento térmico y durabilidad.' },
     { id: 10, nombre: 'Bloquelón', precio: 4000, medidas: 'Grande', stock: 150, categoria: 'Bloques', imagen: 'https://placehold.co/300x200/7c3aed/ffffff?text=Bloquelon', descripcion: 'Bloquelón de gran tamaño y resistencia para proyectos de alta envergadura.' },
+    { id: 11, nombre: 'Ladrillo Prensado Liviano 24.5x12x6cm Santafe', precio: 1400, medidas: '24.5x12x6 cm', stock: 1000, categoria: 'Ladrillos', imagen: 'https://placehold.co/300x200/b45309/ffffff?text=Prensado+Liviano', descripcion: 'Ladrillo prensado liviano Santafe. 2.2 Kg, rendimiento 56 u/m2. Tipo enchape, color terracota. Código: 114940.' },
+    { id: 12, nombre: 'Bloque Perf Vert DP 33x23x11.5cm', precio: 4900, medidas: '33x23x11.5 cm', stock: 600, categoria: 'Bloques', imagen: 'https://placehold.co/300x200/9a3412/ffffff?text=Bloque+DP', descripcion: 'Bloque perforación vertical DP estructural. 7.9 Kg, rendimiento 12.25 u/m2. Color terracota. Código: 76786.' },
+    { id: 13, nombre: 'Ladrillo Refractario 24x12.5x4cm 1400°C', precio: 2700, medidas: '24x12.5x4 cm', stock: 500, categoria: 'Refractarios', imagen: 'https://placehold.co/300x200/d97706/ffffff?text=Refractario', descripcion: 'Ladrillo refractario de alta resistencia térmica hasta 1400°C. 1.5 Kg, rendimiento 36 u/m2, color arena. Código: 159253.' },
+    { id: 14, nombre: 'Tolete #1 Perforado 24x12x6cm', precio: 660, medidas: '24x12x6 cm', stock: 1500, categoria: 'Ladrillos', imagen: 'https://placehold.co/300x200/c2410c/ffffff?text=Tolete+Perforado', descripcion: 'Tolete #1 perforado artesanal. 2.10 Kg, rendimiento 56 u/m2. Garantía 1 año. Código: 99717.' },
+    { id: 15, nombre: 'Prensado Macizo 24.5x12x5.5cm', precio: 1900, medidas: '24.5x12x5.5 cm', stock: 800, categoria: 'Ladrillos', imagen: 'https://placehold.co/300x200/b45309/ffffff?text=Prensado+Macizo', descripcion: 'Ladrillo prensado macizo tipo enchape. Rendimiento 60 u/m2, color terracota. Código: 23209.' },
+    { id: 16, nombre: 'Tableta Arcilla Cúcuta 20x20cm', precio: 23000, medidas: '20x20 cm', stock: 400, categoria: 'Tabletas', imagen: 'https://placehold.co/300x200/ea580c/ffffff?text=Tableta+Cucuta', descripcion: 'Tableta elaborada en arcilla natural tamaño 20x20 cm. Acabado tradicional para pisos y muros.' },
+    { id: 17, nombre: 'Adoquín Corbatín 15x10x6cm', precio: 800, medidas: '15x10x6 cm', stock: 1200, categoria: 'Adoquines', imagen: 'https://placehold.co/300x200/78716c/ffffff?text=Adoquin+Corbatin', descripcion: 'Adoquín tipo corbatín para pavimentación exterior y senderos de alto tránsito.' },
+    { id: 18, nombre: 'Tableta Rústica 25x25cm', precio: 20000, medidas: '25x25 cm', stock: 350, categoria: 'Tabletas', imagen: 'https://placehold.co/300x200/c2410c/ffffff?text=Tableta+Rustica', descripcion: 'Tableta acabado rústico en arcilla de alta resistencia, formato 25x25 cm.' },
+    { id: 19, nombre: 'Ladrillo Prisma Gris 24x12x6cm', precio: 900, medidas: '24x12x6 cm', stock: 700, categoria: 'Fachadas', imagen: 'https://placehold.co/300x200/64748b/ffffff?text=Prisma+Gris', descripcion: 'Ladrillo de fachada acabado prisma gris moderno. Alta estética arquitectónica.' },
+    { id: 20, nombre: 'Ladrillo Cocoa 24x12x6cm', precio: 900, medidas: '24x12x6 cm', stock: 700, categoria: 'Fachadas', imagen: 'https://placehold.co/300x200/78350f/ffffff?text=Ladrillo+Cocoa', descripcion: 'Ladrillo de fachada tono cocoa oscuro elegante. Gran durabilidad y textura.' },
+    { id: 21, nombre: 'Arena de Río (m³)', precio: 100000, medidas: 'm³', stock: 100, categoria: 'Agregados', imagen: 'https://placehold.co/300x200/a8a29e/ffffff?text=Arena+de+Rio', descripcion: 'Arena de río lavada y seleccionada para mezclas de concreto y pegas de mampostería.' },
+    { id: 22, nombre: 'Arena Amarilla (m³)', precio: 100000, medidas: 'm³', stock: 100, categoria: 'Agregados', imagen: 'https://placehold.co/300x200/ca8a04/ffffff?text=Arena+Amarilla', descripcion: 'Arena amarilla seleccionada para morteros de pega, acabados y revoques uniformes.' },
+    { id: 23, nombre: 'Mixto de Concreto (m³)', precio: 100000, medidas: 'm³', stock: 100, categoria: 'Agregados', imagen: 'https://placehold.co/300x200/57534e/ffffff?text=Mixto+Concreto', descripcion: 'Material mixto granular (grava y arena) balanceado para fundición estructural.' },
 ];
 
-const CATEGORIES = ['Todos', 'Ladrillos', 'Bloques', 'Tejas', 'Especiales'];
+const CATEGORIES = ['Todos', 'Ladrillos', 'Bloques', 'Fachadas', 'Refractarios', 'Tabletas', 'Adoquines', 'Tejas', 'Agregados', 'Especiales'];
 
 export default function ProductsPage() {
     const { addItem } = useCart();
@@ -73,7 +86,7 @@ export default function ProductsPage() {
                     {CATEGORIES.map(cat => (
                         <button
                             key={cat}
-                            className={`category-pill${category === cat ? ' active' : ''}`}
+                            className={`category-pill${category === cat ? ' active' : ''}${cat === 'Agregados' ? ' category-pill-agregados' : ''}`}
                             onClick={() => setCategory(cat)}
                         >
                             {cat}

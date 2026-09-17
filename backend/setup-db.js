@@ -65,6 +65,19 @@ async function setup() {
         ['Adoquín', 550, 'Estándar', 'Adoquín de arcilla pavimento.', 600, 'https://placehold.co/300x200/a3a3a3/ffffff?text=Adoquin', 'Especiales'],
         ['Teja de barro', 1000, 'Estándar', 'Teja de barro tradicional.', 450, 'https://placehold.co/300x200/dc2626/ffffff?text=Teja+de+Barro', 'Tejas'],
         ['Bloquelón', 4000, 'Grande', 'Bloquelón de gran tamaño.', 150, 'https://placehold.co/300x200/7c3aed/ffffff?text=Bloquelon', 'Bloques'],
+        ['Ladrillo Prensado Liviano 24.5x12x6cm Santafe', 1400, '24.5x12x6 cm', 'Ladrillo prensado liviano Santafe. 2.2 Kg, rendimiento 56 u/m2. Tipo enchape, color terracota. Código: 114940.', 1000, 'https://placehold.co/400x300/b45309/ffffff?text=Prensado+Liviano', 'Ladrillos'],
+        ['Bloque Perf Vert DP 33x23x11.5cm', 4900, '33x23x11.5 cm', 'Bloque perforación vertical DP estructural. 7.9 Kg, rendimiento 12.25 u/m2. Color terracota. Código: 76786.', 600, 'https://placehold.co/400x300/9a3412/ffffff?text=Bloque+DP', 'Bloques'],
+        ['Ladrillo Refractario 24x12.5x4cm 1400°C', 2700, '24x12.5x4 cm', 'Ladrillo refractario de alta resistencia térmica hasta 1400°C. 1.5 Kg, rendimiento 36 u/m2, color arena. Código: 159253.', 500, 'https://placehold.co/400x300/d97706/ffffff?text=Refractario', 'Refractarios'],
+        ['Tolete #1 Perforado 24x12x6cm', 660, '24x12x6 cm', 'Tolete #1 perforado artesanal. 2.10 Kg, rendimiento 56 u/m2. Garantía 1 año. Código: 99717.', 1500, 'https://placehold.co/400x300/c2410c/ffffff?text=Tolete+Perforado', 'Ladrillos'],
+        ['Prensado Macizo 24.5x12x5.5cm', 1900, '24.5x12x5.5 cm', 'Ladrillo prensado macizo tipo enchape. Rendimiento 60 u/m2, color terracota. Código: 23209.', 800, 'https://placehold.co/400x300/b45309/ffffff?text=Prensado+Macizo', 'Ladrillos'],
+        ['Tableta Arcilla Cúcuta 20x20cm', 23000, '20x20 cm', 'Tableta elaborada en arcilla natural tamaño 20x20 cm. Acabado tradicional para pisos y muros.', 400, 'https://placehold.co/400x300/ea580c/ffffff?text=Tableta+Cucuta', 'Tabletas'],
+        ['Adoquín Corbatín 15x10x6cm', 800, '15x10x6 cm', 'Adoquín tipo corbatín para pavimentación exterior y senderos de alto tránsito.', 1200, 'https://placehold.co/400x300/78716c/ffffff?text=Adoquin+Corbatin', 'Adoquines'],
+        ['Tableta Rústica 25x25cm', 20000, '25x25 cm', 'Tableta acabado rústico en arcilla de alta resistencia, formato 25x25 cm.', 350, 'https://placehold.co/400x300/c2410c/ffffff?text=Tableta+Rustica', 'Tabletas'],
+        ['Ladrillo Prisma Gris 24x12x6cm', 900, '24x12x6 cm', 'Ladrillo de fachada acabado prisma gris moderno. Alta estética arquitectónica.', 700, 'https://placehold.co/400x300/64748b/ffffff?text=Prisma+Gris', 'Fachadas'],
+        ['Ladrillo Cocoa 24x12x6cm', 900, '24x12x6 cm', 'Ladrillo de fachada tono cocoa oscuro elegante. Gran durabilidad y textura.', 700, 'https://placehold.co/400x300/78350f/ffffff?text=Ladrillo+Cocoa', 'Fachadas'],
+        ['Arena de Río (m³)', 100000, 'm³', 'Arena de río lavada y seleccionada para mezclas de concreto y pegas de mampostería.', 100, 'https://placehold.co/400x300/a8a29e/ffffff?text=Arena+de+Rio', 'Agregados'],
+        ['Arena Amarilla (m³)', 100000, 'm³', 'Arena amarilla seleccionada para morteros de pega, acabados y revoques uniformes.', 100, 'https://placehold.co/400x300/ca8a04/ffffff?text=Arena+Amarilla', 'Agregados'],
+        ['Mixto de Concreto (m³)', 100000, 'm³', 'Material mixto granular (grava y arena) balanceado para fundición estructural.', 100, 'https://placehold.co/400x300/57534e/ffffff?text=Mixto+Concreto', 'Agregados'],
       ];
       for (const p of seed) {
         await conn.execute(
@@ -72,7 +85,7 @@ async function setup() {
           p
         );
       }
-      console.log('✅ 10 Productos iniciales sembrados');
+      console.log('✅ 23 Productos iniciales sembrados');
     }
 
     // Tabla: usuarios
