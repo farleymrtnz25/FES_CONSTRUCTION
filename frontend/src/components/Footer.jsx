@@ -53,7 +53,7 @@ export default function Footer({ onNavigate }) {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.875rem' }}>
                                 <Mail size={16} color="var(--color-primary)" />
-                                <span>info@fesconstruccion.com</span>
+                                <span>ysnfrl0@gmail.com</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.875rem' }}>
                                 <MapPin size={16} color="var(--color-primary)" />
