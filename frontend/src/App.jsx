@@ -12,14 +12,17 @@ import AboutPage from './components/AboutPage';
 import ContactPage from './components/ContactPage';
 import LegalPage from './components/LegalPage';
 import MobileBottomNav from './components/MobileBottomNav';
+import SplashScreen from './components/SplashScreen';
 import { useAuth } from './context/AuthContext';
 import { useCart } from './context/CartContext';
 import { isMobileApp } from './config';
+import logoImg from './assets/logo.png';
 
 export default function App() {
   const { user, isAdmin } = useAuth();
   const { setIsOpen: setMenuOpen } = useCart();
   const [activeSection, setActiveSection] = useState('inicio');
+  const [showSplash, setShowSplash] = useState(isMobileApp);
 
   // Scroll to top on section change
   useEffect(() => {
@@ -46,9 +49,15 @@ export default function App() {
 
   return (
     <div className={`app-root${isMobileApp ? ' mobile-app' : ''}`}>
-      {/* En mobile app: navbar simplificado; en web: navbar completo */}
+      {/* Splash screen de bienvenida en la app móvil */}
+      {showSplash && (
+        <SplashScreen onFinish={() => setShowSplash(false)} />
+      )}
+
+      {/* En mobile app: navbar simplificado con logo; en web: navbar completo */}
       {isMobileApp ? (
         <header className="mobile-top-bar">
+          <img src={logoImg} alt="Logo" className="mobile-top-bar-logo" />
           <span className="mobile-top-bar-title">F.E.S. Construcción</span>
         </header>
       ) : (
