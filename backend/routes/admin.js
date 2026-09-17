@@ -78,6 +78,30 @@ router.patch('/productos/:id/stock', async (req, res) => {
     }
 });
 
+// PATCH /api/admin/productos/:id/precio — actualización directa de precio
+router.patch('/productos/:id/precio', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { precio } = req.body;
+        if (precio === undefined || isNaN(precio) || Number(precio) < 0) {
+            return res.status(400).json({ error: 'Precio inválido' });
+        }
+
+        try {
+            const [prod] = await db.execute('SELECT nombre, precio FROM productos WHERE id = ?', [id]);
+            if (prod.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+
+            await db.execute('UPDATE productos SET precio = ? WHERE id = ?', [Number(precio), id]);
+            res.json({ message: 'Precio actualizado exitosamente', nuevoPrecio: Number(precio) });
+        } catch (dbErr) {
+            console.error('Error al actualizar precio:', dbErr);
+            res.status(500).json({ error: 'Error en base de datos al actualizar precio' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: 'Error' });
+    }
+});
+
 // --- PEDIDOS ---
 
 // GET /api/admin/pedidos

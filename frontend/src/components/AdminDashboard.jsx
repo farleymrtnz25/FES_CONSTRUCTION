@@ -33,6 +33,7 @@ export default function AdminDashboard() {
     const [adjustForm, setAdjustForm] = useState({ cantidad: '', nota: '' });
     const [dateFilters, setDateFilters] = useState({ desde: '', hasta: '' });
     const [editingStockId, setEditingStockId] = useState(null);
+    const [editingPriceId, setEditingPriceId] = useState(null);
     const [productSearch, setProductSearch] = useState('');
     const [orderSearch, setOrderSearch] = useState('');
 
@@ -104,6 +105,22 @@ export default function AdminDashboard() {
             });
             if (res.ok) {
                 setEditingStockId(null);
+                loadData();
+            }
+        } catch (err) { console.error(err); }
+    };
+
+    const updatePriceDirectly = async (id, price) => {
+        const num = parseFloat(price);
+        if (isNaN(num) || num < 0) return;
+        try {
+            const res = await authFetch(`${API_BASE_URL}/api/admin/productos/${id}/precio`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ precio: num })
+            });
+            if (res.ok) {
+                setEditingPriceId(null);
                 loadData();
             }
         } catch (err) { console.error(err); }
@@ -468,7 +485,7 @@ export default function AdminDashboard() {
                                 <div className="table-wrapper">
                                     <table>
                                         <thead>
-                                            <tr><th>Producto</th><th>Categoría</th><th>Stock Actual</th><th>Ajustar</th></tr>
+                                            <tr><th>Producto</th><th>Categoría</th><th>Precio ($ COP)</th><th>Stock Actual</th><th>Ajustar</th></tr>
                                         </thead>
                                         <tbody>
                                             {filteredProducts.map(p => (
@@ -478,6 +495,36 @@ export default function AdminDashboard() {
                                                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>ID: {p.id}</div>
                                                     </td>
                                                     <td><span className="badge badge-gray">{p.categoria}</span></td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            {editingPriceId === p.id ? (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                                    <span style={{ fontWeight: 700, color: '#d97706' }}>$</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        className="form-input"
+                                                                        style={{ width: 110, padding: '4px 8px', fontWeight: 700 }}
+                                                                        defaultValue={p.precio}
+                                                                        onBlur={(e) => updatePriceDirectly(p.id, e.target.value)}
+                                                                        onKeyDown={(e) => e.key === 'Enter' && updatePriceDirectly(p.id, e.target.value)}
+                                                                        autoFocus
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <span
+                                                                    className="badge badge-warning"
+                                                                    style={{ fontSize: '0.95rem', padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}
+                                                                    onClick={() => setEditingPriceId(p.id)}
+                                                                    title="Click para cambiar precio"
+                                                                >
+                                                                    ${Number(p.precio).toLocaleString('es-CO')}
+                                                                </span>
+                                                            )}
+                                                            <button className="btn btn-ghost btn-icon btn-xs" onClick={() => setEditingPriceId(p.id)} title="Cambiar precio">
+                                                                <Edit size={12} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
                                                     <td>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                             {editingStockId === p.id ? (
