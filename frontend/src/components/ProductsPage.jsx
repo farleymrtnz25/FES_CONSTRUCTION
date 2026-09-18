@@ -143,7 +143,7 @@ export default function ProductsPage() {
                                 style={{ animationDelay: `${Math.min(i * 60, 400)}ms` }}
                             >
                                 <div className="product-card-image">
-                                    <img src={product.imagen} alt={product.nombre} loading="lazy" />
+                                    <img src={product.imagen || product.imagen_url || 'https://placehold.co/400x300/e2e8f0/64748b?text=Material'} alt={product.nombre} loading="lazy" />
                                     <div className="product-card-overlay">
                                         <button
                                             className={`btn btn-sm ${added[product.id] ? 'btn-success' : 'btn-primary'}`}
@@ -163,8 +163,11 @@ export default function ProductsPage() {
 
                                 <div className="product-card-body">
                                     <h2 className="product-card-name">{product.nombre}</h2>
-                                    <p className="product-card-measures">Medidas: {product.medidas}</p>
+                                    {(product.medidas || product.dimensiones) && (
+                                        <p className="product-card-measures">Medidas: {product.medidas || product.dimensiones}</p>
+                                    )}
                                     <p className="product-card-desc">{product.descripcion}</p>
+
 
                                     <div className="product-card-footer">
                                         <div>

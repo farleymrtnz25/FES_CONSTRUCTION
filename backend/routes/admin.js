@@ -19,6 +19,86 @@ router.get('/productos', async (req, res) => {
     }
 });
 
+// POST /api/admin/productos — crear nuevo producto
+router.post('/productos', async (req, res) => {
+    try {
+        const { nombre, descripcion, precio, dimensiones, medidas, imagen_url, imagen, categoria, stock } = req.body;
+
+        if (!nombre || !precio) {
+            return res.status(400).json({ error: 'Nombre y precio son obligatorios' });
+        }
+
+        const precioNum = parseFloat(precio);
+        const stockNum = parseInt(stock) || 0;
+        const imgVal = imagen_url || imagen || '';
+        const medVal = dimensiones || medidas || '';
+
+        if (isNaN(precioNum) || precioNum < 0) {
+            return res.status(400).json({ error: 'Precio inválido' });
+        }
+
+        // Try inserting with 'imagen' and 'medidas' (standard TiDB schema)
+        let result;
+        try {
+            [result] = await db.execute(
+                `INSERT INTO productos (nombre, descripcion, precio, medidas, imagen, categoria, stock, creado_en)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+                [
+                    nombre.trim(),
+                    descripcion || '',
+                    precioNum,
+                    medVal,
+                    imgVal,
+                    categoria || 'Especiales',
+                    stockNum
+                ]
+            );
+        } catch (colErr) {
+            // Fallback if schema has 'imagen_url' and 'dimensiones'
+            console.log('Retrying with alternative column names:', colErr.message);
+            [result] = await db.execute(
+                `INSERT INTO productos (nombre, descripcion, precio, dimensiones, imagen_url, categoria, stock, creado_en)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+                [
+                    nombre.trim(),
+                    descripcion || '',
+                    precioNum,
+                    medVal,
+                    imgVal,
+                    categoria || 'Especiales',
+                    stockNum
+                ]
+            );
+        }
+
+        res.status(201).json({
+            message: 'Producto creado exitosamente',
+            id: result.insertId
+        });
+    } catch (error) {
+        console.error('Error al crear producto:', error);
+        res.status(500).json({ error: 'Error en base de datos al crear producto: ' + error.message });
+    }
+});
+
+
+// DELETE /api/admin/productos/:id — eliminar producto
+router.delete('/productos/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const [prod] = await db.execute('SELECT nombre FROM productos WHERE id = ?', [id]);
+        if (prod.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+
+        await db.execute('DELETE FROM productos WHERE id = ?', [id]);
+        res.json({ message: `Producto "${prod[0].nombre}" eliminado correctamente` });
+    } catch (error) {
+        console.error('Error al eliminar producto:', error);
+        res.status(500).json({ error: 'Error en base de datos al eliminar producto' });
+    }
+});
+
+
+
 // POST /api/admin/productos/:id/stock-adjust
 router.post('/productos/:id/stock-adjust', async (req, res) => {
     try {
