@@ -47,22 +47,33 @@ export default function AdminDashboard() {
         setLoading(true);
         try {
             const statsParams = dateFilters.desde && dateFilters.hasta ? `?desde=${dateFilters.desde}&hasta=${dateFilters.hasta}` : '';
-            const [prodRes, orderRes, statsRes, invRes] = await Promise.all([
-                authFetch(`${API_BASE_URL}/api/admin/productos`),
-                authFetch(`${API_BASE_URL}/api/admin/pedidos`),
-                authFetch(`${API_BASE_URL}/api/admin/reportes/ventas${statsParams}`),
-                authFetch(`${API_BASE_URL}/api/admin/reportes/inventario`)
-            ]);
-
-            if (!prodRes.ok) throw new Error('Error fetching data');
+            
+            // Safe fetch helper to avoid entire dashboard failing if one endpoint has issue
+            const safeFetch = async (url, fallback) => {
+                try {
+                    const res = await authFetch(url);
+                    if (!res.ok) return fallback;
+                    return await res.json();
+                } catch {
+                    return fallback;
+                }
+            };
 
             const [products, orders, stats, inventory] = await Promise.all([
-                prodRes.json(), orderRes.json(), statsRes.json(), invRes.json()
+                safeFetch(`${API_BASE_URL}/api/admin/productos`, []),
+                safeFetch(`${API_BASE_URL}/api/admin/pedidos`, []),
+                safeFetch(`${API_BASE_URL}/api/admin/reportes/ventas${statsParams}`, { totalGeneral: { total_pedidos: 0, ingresos_totales: 0 }, topProductos: [] }),
+                safeFetch(`${API_BASE_URL}/api/admin/reportes/inventario`, { movimientos: [], stockActual: [] })
             ]);
-            setData({ products, orders, stats, inventory });
+
+            setData({ 
+                products: Array.isArray(products) ? products : [], 
+                orders: Array.isArray(orders) ? orders : [], 
+                stats: stats || { totalGeneral: { total_pedidos: 0, ingresos_totales: 0 }, topProductos: [] }, 
+                inventory: inventory || { movimientos: [], stockActual: [] } 
+            });
         } catch (err) {
-            console.error('Error:', err);
-            alert('Error al cargar datos del servidor: ' + err.message);
+            console.error('Error al cargar dashboard:', err);
         } finally {
             setLoading(false);
         }
@@ -709,9 +720,9 @@ export default function AdminDashboard() {
                                             {filteredProducts.map(p => (
                                                 <tr key={p.id}>
                                                     <td>
-                                                        {p.imagen_url ? (
+                                                        {(p.imagen_url || p.imagen) ? (
                                                             <img 
-                                                                src={p.imagen_url} 
+                                                                src={p.imagen_url || p.imagen} 
                                                                 alt={p.nombre} 
                                                                 style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, border: "1px solid var(--color-border)" }}
                                                                 onError={e => { e.currentTarget.style.display = "none"; }}
