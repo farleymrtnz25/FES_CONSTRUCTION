@@ -36,44 +36,27 @@ export default function AdminDashboard() {
     const [editingPriceId, setEditingPriceId] = useState(null);
     const [productSearch, setProductSearch] = useState('');
     const [orderSearch, setOrderSearch] = useState('');
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [addingProduct, setAddingProduct] = useState(false);
-    const [newProduct, setNewProduct] = useState({
-        nombre: '', descripcion: '', precio: '', dimensiones: '',
-        imagen_url: '', categoria: 'Ladrillos', stock: '0'
-    });
 
     const loadData = async () => {
         setLoading(true);
         try {
             const statsParams = dateFilters.desde && dateFilters.hasta ? `?desde=${dateFilters.desde}&hasta=${dateFilters.hasta}` : '';
-            
-            // Safe fetch helper to avoid entire dashboard failing if one endpoint has issue
-            const safeFetch = async (url, fallback) => {
-                try {
-                    const res = await authFetch(url);
-                    if (!res.ok) return fallback;
-                    return await res.json();
-                } catch {
-                    return fallback;
-                }
-            };
-
-            const [products, orders, stats, inventory] = await Promise.all([
-                safeFetch(`${API_BASE_URL}/api/admin/productos`, []),
-                safeFetch(`${API_BASE_URL}/api/admin/pedidos`, []),
-                safeFetch(`${API_BASE_URL}/api/admin/reportes/ventas${statsParams}`, { totalGeneral: { total_pedidos: 0, ingresos_totales: 0 }, topProductos: [] }),
-                safeFetch(`${API_BASE_URL}/api/admin/reportes/inventario`, { movimientos: [], stockActual: [] })
+            const [prodRes, orderRes, statsRes, invRes] = await Promise.all([
+                authFetch(`${API_BASE_URL}/api/admin/productos`),
+                authFetch(`${API_BASE_URL}/api/admin/pedidos`),
+                authFetch(`${API_BASE_URL}/api/admin/reportes/ventas${statsParams}`),
+                authFetch(`${API_BASE_URL}/api/admin/reportes/inventario`)
             ]);
 
-            setData({ 
-                products: Array.isArray(products) ? products : [], 
-                orders: Array.isArray(orders) ? orders : [], 
-                stats: stats || { totalGeneral: { total_pedidos: 0, ingresos_totales: 0 }, topProductos: [] }, 
-                inventory: inventory || { movimientos: [], stockActual: [] } 
-            });
+            if (!prodRes.ok) throw new Error('Error fetching data');
+
+            const [products, orders, stats, inventory] = await Promise.all([
+                prodRes.json(), orderRes.json(), statsRes.json(), invRes.json()
+            ]);
+            setData({ products, orders, stats, inventory });
         } catch (err) {
-            console.error('Error al cargar dashboard:', err);
+            console.error('Error:', err);
+            alert('Error al cargar datos del servidor: ' + err.message);
         } finally {
             setLoading(false);
         }
@@ -143,61 +126,6 @@ export default function AdminDashboard() {
         } catch (err) { console.error(err); }
     };
 
-
-    const createProduct = async (e) => {
-        e.preventDefault();
-        if (!newProduct.nombre.trim() || !newProduct.precio) {
-            alert('El nombre y el precio son obligatorios.');
-            return;
-        }
-        setAddingProduct(true);
-        try {
-            const res = await authFetch(`${API_BASE_URL}/api/admin/productos`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nombre: newProduct.nombre.trim(),
-                    descripcion: newProduct.descripcion,
-                    precio: parseFloat(newProduct.precio),
-                    dimensiones: newProduct.dimensiones,
-                    imagen_url: newProduct.imagen_url,
-                    categoria: newProduct.categoria,
-                    stock: parseInt(newProduct.stock) || 0
-                })
-            });
-            const data = await res.json();
-            if (res.ok) {
-                setNewProduct({ nombre: '', descripcion: '', precio: '', dimensiones: '', imagen_url: '', categoria: 'Ladrillos', stock: '0' });
-                setShowAddForm(false);
-                loadData();
-                alert(`? Producto "${newProduct.nombre}" agregado exitosamente (ID: ${data.id})`);
-            } else {
-                alert('? Error: ' + (data.error || 'No se pudo crear el producto'));
-            }
-        } catch (err) {
-            console.error(err);
-            alert('? Error de conexión al crear el producto');
-        } finally {
-            setAddingProduct(false);
-        }
-    };
-
-    const deleteProduct = async (id, nombre) => {
-        if (!window.confirm(`¿Eliminar el producto "${nombre}"? Esta acción no se puede deshacer.`)) return;
-        try {
-            const res = await authFetch(`${API_BASE_URL}/api/admin/productos/${id}`, { method: 'DELETE' });
-            const data = await res.json();
-            if (res.ok) {
-                loadData();
-                alert(`? ${data.message}`);
-            } else {
-                alert('? Error: ' + (data.error || 'No se pudo eliminar'));
-            }
-        } catch (err) {
-            console.error(err);
-            alert('? Error de conexión al eliminar');
-        }
-    };
     const generateAdminPDF = () => {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -540,199 +468,28 @@ export default function AdminDashboard() {
                 )}
 
                 {/* --- PRODUCTOS / STOCK --- */}
-                                {/* --- PRODUCTOS / STOCK --- */}
                 {tab === 'productos' && (
                     <div className="animate-scale-in">
-                        {/* Botón y Formulario para Agregar Producto */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                        <div style={{ marginBottom: '1rem' }}>
                             <input
                                 type="text"
                                 className="form-input"
-                                placeholder="?? Buscar producto por nombre, categoría o ID..."
+                                placeholder="ðŸ” Buscar producto por nombre, categorÃ­a o ID..."
                                 value={productSearch}
                                 onChange={e => setProductSearch(e.target.value)}
-                                style={{ maxWidth: 360, width: '100%' }}
+                                style={{ maxWidth: 400, width: '100%' }}
                             />
-                            <button
-                                className={`btn ${showAddForm ? 'btn-outline' : 'btn-primary'}`}
-                                onClick={() => setShowAddForm(!showAddForm)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                            >
-                                <Plus size={16} /> {showAddForm ? 'Cancelar' : 'Agregar Nuevo Producto'}
-                            </button>
                         </div>
-
-                        {showAddForm && (
-                            <div className="card animate-fade-in" style={{ padding: '1.75rem', marginBottom: '1.5rem', border: '2px solid var(--color-primary)' }}>
-                                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-primary)' }}>
-                                    <Plus size={20} /> Nuevo Producto para el Catálogo
-                                </h3>
-                                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
-                                    Ingresa los datos del producto. Se guardará directamente en la base de datos y se mostrará de inmediato en la tienda y en la app móvil.
-                                </p>
-
-                                <form onSubmit={createProduct} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                                                Nombre del Producto *
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-input"
-                                                placeholder="Ej: Ladrillo Estructural 24x12x6"
-                                                required
-                                                value={newProduct.nombre}
-                                                onChange={e => setNewProduct({ ...newProduct, nombre: e.target.value })}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                                                Categoría *
-                                            </label>
-                                            <select
-                                                className="form-input"
-                                                value={newProduct.categoria}
-                                                onChange={e => setNewProduct({ ...newProduct, categoria: e.target.value })}
-                                            >
-                                                <option value="Ladrillos">Ladrillos</option>
-                                                <option value="Bloques">Bloques</option>
-                                                <option value="Fachadas">Fachadas</option>
-                                                <option value="Refractarios">Refractarios</option>
-                                                <option value="Tabletas">Tabletas</option>
-                                                <option value="Adoquines">Adoquines</option>
-                                                <option value="Tejas">Tejas</option>
-                                                <option value="Agregados">Agregados</option>
-                                                <option value="Especiales">Especiales</option>
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                                                Precio ($ COP) *
-                                            </label>
-                                            <input
-                                                type="number"
-                                                className="form-input"
-                                                placeholder="Ej: 1400"
-                                                required
-                                                min="0"
-                                                step="any"
-                                                value={newProduct.precio}
-                                                onChange={e => setNewProduct({ ...newProduct, precio: e.target.value })}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                                                Dimensiones / Presentación
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-input"
-                                                placeholder="Ej: 24.5x12x6 cm o m3"
-                                                value={newProduct.dimensiones}
-                                                onChange={e => setNewProduct({ ...newProduct, dimensiones: e.target.value })}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                                                Stock Inicial
-                                            </label>
-                                            <input
-                                                type="number"
-                                                className="form-input"
-                                                placeholder="0"
-                                                min="0"
-                                                value={newProduct.stock}
-                                                onChange={e => setNewProduct({ ...newProduct, stock: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                                            Enlace de la Foto del Producto (URL)
-                                        </label>
-                                        <input
-                                            type="url"
-                                            className="form-input"
-                                            placeholder="https://ejemplo.com/foto-ladrillo.jpg"
-                                            value={newProduct.imagen_url}
-                                            onChange={e => setNewProduct({ ...newProduct, imagen_url: e.target.value })}
-                                        />
-                                        {newProduct.imagen_url && (
-                                            <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Vista previa:</span>
-                                                <img
-                                                    src={newProduct.imagen_url}
-                                                    alt="Preview"
-                                                    style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--color-border)' }}
-                                                    onError={e => { e.currentTarget.style.display = 'none'; }}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                                            Descripción del Producto
-                                        </label>
-                                        <textarea
-                                            className="form-input"
-                                            rows={3}
-                                            placeholder="Detalles sobre características, usos recomendados, rendimiento por m2, etc."
-                                            value={newProduct.descripcion}
-                                            onChange={e => setNewProduct({ ...newProduct, descripcion: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                                        <button
-                                            type="button"
-                                            className="btn btn-secondary btn-sm"
-                                            onClick={() => setShowAddForm(false)}
-                                        >
-                                            Cancelar
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            className="btn btn-primary btn-sm"
-                                            disabled={addingProduct}
-                                            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                        >
-                                            <Plus size={16} /> {addingProduct ? 'Guardando en BD...' : 'Guardar Producto en Base de Datos'}
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        )}
                         <div className="card">
                             <div className="card-body">
                                 <div className="table-wrapper">
                                     <table>
                                         <thead>
-                                            <tr><th style="width: 50px;">Foto</th><th>Producto</th><th>Categoría</th><th>Precio ($ COP)</th><th>Stock Actual</th><th>Acciones</th></tr>
+                                            <tr><th>Producto</th><th>CategorÃ­a</th><th>Precio ($ COP)</th><th>Stock Actual</th><th>Ajustar</th></tr>
                                         </thead>
                                         <tbody>
                                             {filteredProducts.map(p => (
                                                 <tr key={p.id}>
-                                                    <td>
-                                                        {(p.imagen_url || p.imagen) ? (
-                                                            <img 
-                                                                src={p.imagen_url || p.imagen} 
-                                                                alt={p.nombre} 
-                                                                style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, border: "1px solid var(--color-border)" }}
-                                                                onError={e => { e.currentTarget.style.display = "none"; }}
-                                                            />
-                                                        ) : (
-                                                            <div style={{ width: 44, height: 44, borderRadius: 6, background: "var(--color-bg-alt)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
-                                                                Sin foto
-                                                            </div>
-                                                        )}
-                                                    </td>
                                                     <td>
                                                         <div style={{ fontWeight: 600 }}>{p.nombre}</div>
                                                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>ID: {p.id}</div>
@@ -801,14 +558,6 @@ export default function AdminDashboard() {
                                                         </button>
                                                         <button className="btn btn-danger btn-xs" onClick={() => setAdjustingStock({ ...p, tipo: 'salida' })} title="Salida de material">
                                                             <ArrowDownRight size={14} /> Salida
-                                                        </button>
-                                                        <button 
-                                                            className="btn btn-ghost btn-icon btn-xs" 
-                                                            onClick={() => deleteProduct(p.id, p.nombre)} 
-                                                            title="Eliminar producto"
-                                                            style={{ color: "var(--color-danger)" }}
-                                                        >
-                                                            <Trash2 size={14} />
                                                         </button>
                                                     </td>
                                                 </tr>
