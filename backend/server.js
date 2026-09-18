@@ -74,6 +74,11 @@ app.post('/api/carrito', async (req, res) => {
 const path = require('path');
 const fs = require('fs');
 
+// Dedicated Health check for Render load balancer
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
+
 // Servir frontend si existe la carpeta dist (despliegue unificado)
 const frontendDist = path.join(__dirname, '../frontend/dist');
 if (fs.existsSync(frontendDist)) {
@@ -82,12 +87,13 @@ if (fs.existsSync(frontendDist)) {
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 } else {
-  // Health check (cuando el backend se despliega por separado)
+  // Fallback info
   app.get('/', (req, res) => {
     res.json({ message: 'API de F.E.S. Construcción funcionando ✅', version: '2.0' });
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`✅ Backend corriendo en http://localhost:${PORT}`);
-});
+const HOST = '0.0.0.0';
+app.listen(PORT, HOST, () => {
+  console.log(`✅ Backend corriendo en http://${HOST}:${PORT}`);
+});
