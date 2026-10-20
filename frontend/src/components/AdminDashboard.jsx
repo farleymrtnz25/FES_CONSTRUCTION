@@ -1,776 +1,747 @@
 import React, { useState, useEffect } from 'react';
-import {
-    LayoutDashboard, Package, ShoppingBag, BarChart3, Users,
-    Plus, Edit, Trash2, CheckCircle, Clock, Truck,
-    ShieldAlert, Download, TrendingUp, ArrowUpRight, ArrowDownRight,
-    ClipboardList, MoveUp, MoveDown, History
-} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { API_BASE_URL } from '../config';
+import { 
+  X, 
+  Package, 
+  TrendingUp, 
+  Clock, 
+  Plus, 
+  Edit, 
+  Trash2, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  DollarSign, 
+  ShoppingBag, 
+  Calendar, 
+  CheckCircle, 
+  AlertCircle,
+  RefreshCw,
+  Search
+} from 'lucide-react';
 
-const fmt = n => n ? n.toLocaleString('es-CO') : '0';
+const TABS = [
+  { id: 'productos', label: 'Inventario & Catálogo', icon: Package },
+  { id: 'pedidos', label: 'Gestión de Pedidos', icon: ShoppingBag },
+  { id: 'reportes', label: 'Reportes de Ventas', icon: TrendingUp },
+  { id: 'movimientos', label: 'Historial de Entradas/Salidas', icon: Clock }
+];
 
-const STATUS_OPTIONS = ['Pendiente', 'Pagado', 'En Proceso', 'Enviado', 'Entregado', 'Finalizado', 'Cancelado'];
-const STATUS_COLORS = {
-    'Pendiente': 'badge-warning',
-    'Pagado': 'badge-success',
-    'En Proceso': 'badge-info',
-    'Enviado': 'badge-primary',
-    'Entregado': 'badge-success',
-    'Finalizado': 'badge-dark',
-    'Cancelado': 'badge-danger'
-};
+export const AdminDashboard = ({ isOpen, onClose }) => {
+  const { token, isAdmin } = useAuth();
+  const [activeTab, setActiveTab] = useState('productos');
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [reports, setReports] = useState(null);
+  const [movements, setMovements] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
 
-export default function AdminDashboard() {
-    const { authFetch } = useAuth();
-    const [tab, setTab] = useState('resumen');
-    const [reportsTab, setReportsTab] = useState('dia'); // dia, mes, año
-    const [data, setData] = useState({ products: [], orders: [], stats: null, inventory: null });
-    const [loading, setLoading] = useState(true);
-    const [adjustingStock, setAdjustingStock] = useState(null); // { id, nombre, tipo }
-    const [adjustForm, setAdjustForm] = useState({ cantidad: '', nota: '' });
-    const [dateFilters, setDateFilters] = useState({ desde: '', hasta: '' });
-    const [editingStockId, setEditingStockId] = useState(null);
-    const [editingPriceId, setEditingPriceId] = useState(null);
-    const [productSearch, setProductSearch] = useState('');
-    const [orderSearch, setOrderSearch] = useState('');
+  // Modals inside admin
+  const [stockModal, setStockModal] = useState({ open: false, product: null, tipo: 'entrada', cantidad: '', nota: '' });
+  const [productModal, setProductModal] = useState({ open: false, product: null, isEdit: false });
+  const [productForm, setProductForm] = useState({
+    nombre: '',
+    precio: '',
+    medidas: '18*9*6',
+    descripcion: '',
+    stock: 500,
+    imagen: '',
+    categoria: 'Ladrillos'
+  });
 
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const statsParams = dateFilters.desde && dateFilters.hasta ? `?desde=${dateFilters.desde}&hasta=${dateFilters.hasta}` : '';
-            const [prodRes, orderRes, statsRes, invRes] = await Promise.all([
-                authFetch(`${API_BASE_URL}/api/admin/productos`),
-                authFetch(`${API_BASE_URL}/api/admin/pedidos`),
-                authFetch(`${API_BASE_URL}/api/admin/reportes/ventas${statsParams}`),
-                authFetch(`${API_BASE_URL}/api/admin/reportes/inventario`)
-            ]);
+  useEffect(() => {
+    if (isOpen && isAdmin) {
+      loadData();
+    }
+  }, [isOpen, activeTab]);
 
-            if (!prodRes.ok) throw new Error('Error fetching data');
+  const showNotify = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3000);
+  };
 
-            const [products, orders, stats, inventory] = await Promise.all([
-                prodRes.json(), orderRes.json(), statsRes.json(), invRes.json()
-            ]);
-            setData({ products, orders, stats, inventory });
-        } catch (err) {
-            console.error('Error:', err);
-            alert('Error al cargar datos del servidor: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
 
-    useEffect(() => { loadData(); }, []);
+      if (activeTab === 'productos') {
+        const res = await fetch('/api/admin/productos', { headers });
+        const data = await res.json();
+        setProducts(data);
+      } else if (activeTab === 'pedidos') {
+        const res = await fetch('/api/admin/pedidos', { headers });
+        const data = await res.json();
+        setOrders(data);
+      } else if (activeTab === 'reportes') {
+        const res = await fetch('/api/admin/reportes/ventas', { headers });
+        const data = await res.json();
+        setReports(data);
+      } else if (activeTab === 'movimientos') {
+        const res = await fetch('/api/admin/reportes/inventario', { headers });
+        const data = await res.json();
+        setMovements(data.movimientos || []);
+      }
+    } catch (err) {
+      console.error('Error cargando datos de admin:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const updateOrderStatus = async (id, status) => {
-        try {
-            const res = await authFetch(`${API_BASE_URL}/api/admin/pedidos/${id}/status`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ estado: status })
-            });
-            if (res.ok) loadData();
-        } catch (err) { console.error(err); }
-    };
+  // Stock Adjustment
+  const handleStockSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`/api/admin/productos/${stockModal.product.id}/stock-adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          tipo: stockModal.tipo,
+          cantidad: Number(stockModal.cantidad),
+          nota: stockModal.nota
+        })
+      });
 
-    const handleStockAdjust = async (e) => {
-        e.preventDefault();
-        if (!adjustingStock) return;
-        try {
-            const res = await authFetch(`${API_BASE_URL}/api/admin/productos/${adjustingStock.id}/stock-adjust`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tipo: adjustingStock.tipo,
-                    cantidad: parseInt(adjustForm.cantidad),
-                    nota: adjustForm.nota
-                })
-            });
-            if (res.ok) {
-                setAdjustingStock(null);
-                setAdjustForm({ cantidad: '', nota: '' });
-                loadData();
-            }
-        } catch (err) { console.error(err); }
-    };
+      if (!res.ok) throw new Error('Error al ajustar stock');
+      showNotify(`Stock de ${stockModal.product.nombre} actualizado correctamente.`);
+      setStockModal({ open: false, product: null, tipo: 'entrada', cantidad: '', nota: '' });
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
-    const updateStockDirectly = async (id, stock) => {
-        try {
-            const res = await authFetch(`${API_BASE_URL}/api/admin/productos/${id}/stock`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stock: parseInt(stock) })
-            });
-            if (res.ok) {
-                setEditingStockId(null);
-                loadData();
-            }
-        } catch (err) { console.error(err); }
-    };
+  // Quick Price Update
+  const handleQuickPrice = async (id, nuevoPrecio) => {
+    const p = prompt('Ingrese el nuevo precio unitario (COP):', nuevoPrecio);
+    if (!p || isNaN(p) || Number(p) <= 0) return;
 
-    const updatePriceDirectly = async (id, price) => {
-        const num = parseFloat(price);
-        if (isNaN(num) || num < 0) return;
-        try {
-            const res = await authFetch(`${API_BASE_URL}/api/admin/productos/${id}/precio`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ precio: num })
-            });
-            if (res.ok) {
-                setEditingPriceId(null);
-                loadData();
-            }
-        } catch (err) { console.error(err); }
-    };
+    try {
+      const res = await fetch(`/api/admin/productos/${id}/precio`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ precio: Number(p) })
+      });
+      if (!res.ok) throw new Error('Error al actualizar precio');
+      showNotify('Precio actualizado exitosamente');
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
-    const generateAdminPDF = () => {
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
+  // Product Save (Create or Edit)
+  const handleSaveProduct = async (e) => {
+    e.preventDefault();
+    try {
+      const url = productModal.isEdit 
+        ? `/api/admin/productos/${productModal.product.id}` 
+        : `/api/admin/productos`;
+      const method = productModal.isEdit ? 'PUT' : 'POST';
 
-        // Header Helper
-        const addHeader = (title) => {
-            doc.setFontSize(22);
-            doc.setTextColor(30, 30, 30);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Tu Proyecto S.A.S.', 14, 20);
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(productForm)
+      });
 
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}`, 14, 26);
+      if (!res.ok) throw new Error('Error al guardar producto');
+      showNotify(productModal.isEdit ? 'Producto modificado con éxito' : 'Nuevo producto creado');
+      setProductModal({ open: false, product: null, isEdit: false });
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
-            doc.setFontSize(16);
-            doc.setTextColor(40, 40, 40);
-            doc.setFont('helvetica', 'bold');
-            doc.text(title, pageWidth / 2, 40, { align: 'center' });
+  // Change Order Status
+  const handleStatusChange = async (pedidoId, nuevoEstado) => {
+    try {
+      const res = await fetch(`/api/admin/pedidos/${pedidoId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ estado: nuevoEstado })
+      });
+      if (!res.ok) throw new Error('Error actualizando estado');
+      showNotify(`Pedido #${pedidoId} actualizado a ${nuevoEstado}`);
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
-            // Separator line
-            doc.setDrawColor(200, 200, 200);
-            doc.line(14, 45, pageWidth - 14, 45);
-        };
+  if (!isOpen) return null;
 
-        // Footer Helper
-        const addFooter = () => {
-            const pageCount = doc.internal.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setTextColor(150, 150, 150);
-                doc.text(`Página ${i} de ${pageCount} - Generado por F.E.S. Admin v2.1`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-            }
-        };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+      {/* Backdrop */}
+      <div onClick={onClose} className="fixed inset-0 bg-slate-950/85 backdrop-blur-md" />
 
-        let startY = 55;
+      {/* Main Container */}
+      <div className="relative w-full max-w-6xl h-[92vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl z-10 flex flex-col overflow-hidden">
+        
+        {/* Top Bar */}
+        <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-600/20 text-orange-400 flex items-center justify-center">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-heading font-extrabold text-lg text-white">
+                Panel de Administración Central — FES Construcción
+              </h2>
+              <p className="text-xs text-slate-400">
+                Control de inventario de patio, auditoría de ventas y despachos en tiempo real
+              </p>
+            </div>
+          </div>
 
-        switch (tab) {
-            case 'resumen':
-                if (!data.stats) return;
-                addHeader('REPORTE GENERAL EJECUTIVO');
-
-                doc.setFontSize(12);
-                doc.setFont('helvetica', 'bold');
-                doc.text('Resumen Financiero', 14, startY);
-
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'normal');
-                doc.text(`Ingresos Totales: $${fmt(data.stats.totalGeneral.ingresos_totales)}`, 14, startY + 8);
-                doc.text(`Total Pedidos Completados: ${data.stats.totalGeneral.total_pedidos}`, 14, startY + 14);
-
-                startY += 30;
-
-                doc.setFontSize(12);
-                doc.setFont('helvetica', 'bold');
-                doc.text('Top Productos Más Vendidos', 14, startY);
-
-                if (data.stats.topProductos && data.stats.topProductos.length > 0) {
-                    autoTable(doc, {
-                        startY: startY + 5,
-                        head: [['Producto', 'Unidades Vendidas']],
-                        body: data.stats.topProductos.map(p => [p.nombre_producto, `${p.unidades_vendidas} uds.`]),
-                        theme: 'grid',
-                        headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold' },
-                        styles: { fontSize: 9 }
-                    });
-                } else {
-                    doc.setFontSize(10);
-                    doc.setFont('helvetica', 'normal');
-                    doc.text('No hay datos suficientes.', 14, startY + 8);
-                }
-
-                addFooter();
-                doc.save('Reporte_General.pdf');
-                break;
-
-            case 'productos':
-                if (!data.products) return;
-                addHeader('REPORTE DE INVENTARIO Y STOCK');
-
-                autoTable(doc, {
-                    startY: startY,
-                    head: [['ID', 'Producto', 'Categoría', 'Stock', 'Estado']],
-                    body: data.products.map(p => {
-                        const estado = p.stock === 0 ? 'Agotado' : (p.stock < 100 ? 'Bajo' : 'Óptimo');
-                        return [p.id.toString(), p.nombre, p.categoria, p.stock.toString(), estado];
-                    }),
-                    theme: 'striped',
-                    headStyles: { fillColor: [39, 174, 96], textColor: 255, fontStyle: 'bold' },
-                    styles: { fontSize: 9 },
-                    didParseCell: function (cellData) {
-                        if (cellData.section === 'body' && cellData.column.index === 4) {
-                            if (cellData.cell.raw === 'Agotado') cellData.cell.styles.textColor = [231, 76, 60];
-                            else if (cellData.cell.raw === 'Bajo') cellData.cell.styles.textColor = [243, 156, 18];
-                            else cellData.cell.styles.textColor = [39, 174, 96];
-                        }
-                    }
-                });
-
-                addFooter();
-                doc.save('Reporte_Inventario.pdf');
-                break;
-
-            case 'movimientos':
-                if (!data.inventory || !data.inventory.movimientos) return;
-                addHeader('BITÁCORA DE ENTRADAS Y SALIDAS');
-
-                autoTable(doc, {
-                    startY: startY,
-                    head: [['Fecha', 'Producto', 'Tipo', 'Cantidad', 'Motivo']],
-                    body: data.inventory.movimientos.map(m => [
-                        new Date(m.fecha).toLocaleString('es-CO'),
-                        m.nombre_producto,
-                        m.tipo.toUpperCase(),
-                        m.cantidad.toString(),
-                        m.nota || 'N/A'
-                    ]),
-                    theme: 'striped',
-                    headStyles: { fillColor: [142, 68, 173], textColor: 255, fontStyle: 'bold' },
-                    styles: { fontSize: 8 },
-                    didParseCell: function (cellData) {
-                        if (cellData.section === 'body' && cellData.column.index === 2) {
-                            if (cellData.cell.raw === 'ENTRADA') cellData.cell.styles.textColor = [39, 174, 96];
-                            else cellData.cell.styles.textColor = [231, 76, 60];
-                        }
-                    }
-                });
-
-                addFooter();
-                doc.save('Reporte_Movimientos.pdf');
-                break;
-
-            case 'pedidos':
-                if (!data.orders) return;
-                addHeader('REPORTE DE PEDIDOS Y ENVÍOS');
-
-                autoTable(doc, {
-                    startY: startY,
-                    head: [['Pedido #', 'Fecha', 'Cliente', 'Estado', 'Total']],
-                    body: data.orders.map(o => [
-                        o.id.toString(),
-                        new Date(o.creado_en).toLocaleDateString('es-CO'),
-                        o.cliente_nombre || 'WhatsApp',
-                        o.estado,
-                        `$${fmt(o.total)}`
-                    ]),
-                    theme: 'striped',
-                    headStyles: { fillColor: [243, 156, 18], textColor: 255, fontStyle: 'bold' },
-                    styles: { fontSize: 9 }
-                });
-
-                addFooter();
-                doc.save('Reporte_Pedidos.pdf');
-                break;
-
-            case 'reportes':
-                if (!data.stats || !data.stats.individual) return;
-                const periodoName = reportsTab === 'dia' ? 'DIARIO' : (reportsTab === 'mes' ? 'MENSUAL' : 'ANUAL');
-                addHeader(`ANÁLISIS DE VENTAS INDIVIDUAL - ${periodoName}`);
-
-                // Agrupar
-                const groupedSales = {};
-                data.stats.individual.forEach(sale => {
-                    const d = new Date(sale.creado_en);
-                    let key = '';
-                    if (reportsTab === 'dia') key = d.toLocaleDateString('es-CO');
-                    else if (reportsTab === 'mes') key = d.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
-                    else key = d.getFullYear().toString();
-
-                    if (!groupedSales[key]) {
-                        groupedSales[key] = { pedidos: 0, ingresos: 0, ventas: [] };
-                    }
-                    groupedSales[key].pedidos += 1;
-                    groupedSales[key].ingresos += Number(sale.total);
-                    groupedSales[key].ventas.push(sale);
-                });
-
-                Object.keys(groupedSales).forEach(k => {
-                    const g = groupedSales[k];
-
-                    // Group Header
-                    doc.setFontSize(11);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setTextColor(40, 40, 40);
-                    doc.text(`${k.toUpperCase()} - Pedidos: ${g.pedidos} | Ingresos: $${fmt(g.ingresos)}`, 14, startY);
-
-                    const rows = g.ventas.map(v => [
-                        `#${v.id}`,
-                        new Date(v.creado_en).toLocaleString('es-CO'),
-                        v.cliente_nombre || 'WhatsApp',
-                        v.metodo_pago,
-                        `$${fmt(v.total)}`
-                    ]);
-
-                    autoTable(doc, {
-                        startY: startY + 4,
-                        head: [['Pedido', 'Fecha y Hora', 'Cliente', 'Método Pago', 'Total']],
-                        body: rows,
-                        theme: 'grid',
-                        headStyles: { fillColor: [52, 73, 94], textColor: 255, fontStyle: 'bold' },
-                        styles: { fontSize: 8 },
-                        columnStyles: {
-                            0: { halign: 'left', fontStyle: 'bold' },
-                            4: { halign: 'right', fontStyle: 'bold' }
-                        }
-                    });
-
-                    startY = doc.lastAutoTable.finalY + 15;
-
-                    if (startY > pageHeight - 40) {
-                        doc.addPage();
-                        startY = 20;
-                    }
-                });
-
-                addFooter();
-                doc.save(`Ventas_${periodoName}.pdf`);
-                break;
-
-            default:
-                break;
-        }
-    };
-
-    const filteredProducts = data.products ? data.products.filter(p =>
-        p.nombre.toLowerCase().includes(productSearch.toLowerCase()) ||
-        p.categoria.toLowerCase().includes(productSearch.toLowerCase()) ||
-        p.id.toString().includes(productSearch)
-    ) : [];
-
-    const filteredOrders = data.orders ? data.orders.filter(o =>
-        o.id.toString().includes(orderSearch) ||
-        (o.cliente_nombre && o.cliente_nombre.toLowerCase().includes(orderSearch.toLowerCase()))
-    ) : [];
-
-    if (loading && !data.stats) return <div className="admin-layout"><div className="admin-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div></div>;
-
-    return (
-        <div className="admin-layout animate-fade-in">
-            {/* Sidebar */}
-            <aside className="admin-sidebar">
-                <div className="admin-sidebar-title">F.E.S. Admin v2.1</div>
-                {[
-                    { id: 'resumen', label: 'Resumen', icon: <LayoutDashboard size={18} /> },
-                    { id: 'productos', label: 'Inventario / Stock', icon: <Package size={18} /> },
-                    { id: 'movimientos', label: 'Entradas/Salidas', icon: <History size={18} /> },
-                    { id: 'pedidos', label: 'Pedidos / Envíos', icon: <ShoppingBag size={18} /> },
-                    { id: 'reportes', label: 'Informes Ventas', icon: <BarChart3 size={18} /> }
-                ].map(item => (
-                    <button
-                        key={item.id}
-                        className={`admin-nav-item${tab === item.id ? ' active' : ''}`}
-                        onClick={() => setTab(item.id)}
-                    >
-                        {item.icon} {item.label}
-                    </button>
-                ))}
-            </aside>
-
-            {/* Main */}
-            <main className="admin-main">
-                <header className="admin-header">
-                    <h1>
-                        {tab === 'resumen' && 'Vista General'}
-                        {tab === 'productos' && 'Gestión de Stock'}
-                        {tab === 'movimientos' && 'Historial de Inventario'}
-                        {tab === 'pedidos' && 'Control de Pedidos'}
-                        {tab === 'reportes' && 'Análisis de Ventas'}
-                    </h1>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={generateAdminPDF}>
-                            <Download size={14} /> Informe PDF
-                        </button>
-                        <button className="btn btn-primary btn-sm" onClick={loadData}>Actualizar</button>
-                    </div>
-                </header>
-
-                {/* --- RESUMEN --- */}
-                {tab === 'resumen' && data.stats && (
-                    <div className="animate-slide-up">
-                        <div className="admin-stat-cards">
-                            <div className="admin-stat-card">
-                                <div className="admin-stat-icon" style={{ background: '#dcfce7', color: '#16a34a' }}><TrendingUp size={24} /></div>
-                                <div className="admin-stat-num">${fmt(data.stats.totalGeneral.ingresos_totales)}</div>
-                                <div className="admin-stat-label">Ventas Totales</div>
-                            </div>
-                            <div className="admin-stat-card">
-                                <div className="admin-stat-icon" style={{ background: '#dbeafe', color: '#2563eb' }}><ShoppingBag size={24} /></div>
-                                <div className="admin-stat-num">{data.stats.totalGeneral.total_pedidos}</div>
-                                <div className="admin-stat-label">Pedidos Realizados</div>
-                            </div>
-                            <div className="admin-stat-card">
-                                <div className="admin-stat-icon" style={{ background: '#fef3c7', color: '#d97706' }}><ShieldAlert size={24} /></div>
-                                <div className="admin-stat-num">{data.products.filter(p => p.stock < 100).length}</div>
-                                <div className="admin-stat-label">Stock bajo (&lt;100 pts)</div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2 card">
-                                <div className="card-body">
-                                    <h3 className="section-title-sm">Pedidos Urgentes (Pendientes)</h3>
-                                    <div className="table-wrapper">
-                                        <table>
-                                            <thead>
-                                                <tr><th>ID</th><th>Cliente</th><th>Total</th><th>Acción</th></tr>
-                                            </thead>
-                                            <tbody>
-                                                {data.orders.filter(o => o.estado === 'Pendiente').slice(0, 6).map(o => (
-                                                    <tr key={o.id}>
-                                                        <td>#{o.id}</td>
-                                                        <td>{o.cliente_nombre || 'WhatsApp'}</td>
-                                                        <td style={{ fontWeight: 700 }}>${fmt(o.total)}</td>
-                                                        <td>
-                                                            <button className="btn btn-ghost btn-sm" onClick={() => setTab('pedidos')}>Gestionar</button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="card">
-                                <div className="card-body">
-                                    <h3 className="section-title-sm">Top Ventas</h3>
-                                    {data.stats.topProductos.slice(0, 5).map((p, i) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: i < 4 ? '1px solid var(--color-border)' : 'none' }}>
-                                            <span style={{ fontSize: '0.85rem' }}>{p.nombre_producto}</span>
-                                            <span className="badge badge-primary">{p.unidades_vendidas} uds.</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- PRODUCTOS / STOCK --- */}
-                {tab === 'productos' && (
-                    <div className="animate-scale-in">
-                        <div style={{ marginBottom: '1rem' }}>
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="🔍 Buscar producto por nombre, categoría o ID..."
-                                value={productSearch}
-                                onChange={e => setProductSearch(e.target.value)}
-                                style={{ maxWidth: 400, width: '100%' }}
-                            />
-                        </div>
-                        <div className="card">
-                            <div className="card-body">
-                                <div className="table-wrapper">
-                                    <table>
-                                        <thead>
-                                            <tr><th>Producto</th><th>Categoría</th><th>Precio ($ COP)</th><th>Stock Actual</th><th>Ajustar</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredProducts.map(p => (
-                                                <tr key={p.id}>
-                                                    <td>
-                                                        <div style={{ fontWeight: 600 }}>{p.nombre}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>ID: {p.id}</div>
-                                                    </td>
-                                                    <td><span className="badge badge-gray">{p.categoria}</span></td>
-                                                    <td>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                            {editingPriceId === p.id ? (
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                                    <span style={{ fontWeight: 700, color: '#d97706' }}>$</span>
-                                                                    <input
-                                                                        type="number"
-                                                                        className="form-input"
-                                                                        style={{ width: 110, padding: '4px 8px', fontWeight: 700 }}
-                                                                        defaultValue={p.precio}
-                                                                        onBlur={(e) => updatePriceDirectly(p.id, e.target.value)}
-                                                                        onKeyDown={(e) => e.key === 'Enter' && updatePriceDirectly(p.id, e.target.value)}
-                                                                        autoFocus
-                                                                    />
-                                                                </div>
-                                                            ) : (
-                                                                <span
-                                                                    className="badge badge-warning"
-                                                                    style={{ fontSize: '0.95rem', padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}
-                                                                    onClick={() => setEditingPriceId(p.id)}
-                                                                    title="Click para cambiar precio"
-                                                                >
-                                                                    ${Number(p.precio).toLocaleString('es-CO')}
-                                                                </span>
-                                                            )}
-                                                            <button className="btn btn-ghost btn-icon btn-xs" onClick={() => setEditingPriceId(p.id)} title="Cambiar precio">
-                                                                <Edit size={12} />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                            {editingStockId === p.id ? (
-                                                                <input
-                                                                    type="number"
-                                                                    className="form-input"
-                                                                    style={{ width: 100, padding: '4px 8px' }}
-                                                                    defaultValue={p.stock}
-                                                                    onBlur={(e) => updateStockDirectly(p.id, e.target.value)}
-                                                                    onKeyDown={(e) => e.key === 'Enter' && updateStockDirectly(p.id, e.target.value)}
-                                                                    autoFocus
-                                                                />
-                                                            ) : (
-                                                                <span
-                                                                    className={`badge ${p.stock > 100 ? 'badge-success' : 'badge-danger'}`}
-                                                                    style={{ fontSize: '1rem', padding: '4px 12px', cursor: 'pointer' }}
-                                                                    onClick={() => setEditingStockId(p.id)}
-                                                                    title="Click para editar"
-                                                                >
-                                                                    {p.stock}
-                                                                </span>
-                                                            )}
-                                                            <button className="btn btn-ghost btn-icon btn-xs" onClick={() => setEditingStockId(p.id)}>
-                                                                <Edit size={12} />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                    <td style={{ display: 'flex', gap: 8 }}>
-                                                        <button className="btn btn-success btn-xs" onClick={() => setAdjustingStock({ ...p, tipo: 'entrada' })} title="Entrada de material">
-                                                            <Plus size={14} /> Entrada
-                                                        </button>
-                                                        <button className="btn btn-danger btn-xs" onClick={() => setAdjustingStock({ ...p, tipo: 'salida' })} title="Salida de material">
-                                                            <ArrowDownRight size={14} /> Salida
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- MOVIMIENTOS --- */}
-                {tab === 'movimientos' && (
-                    <div className="card animate-slide-up">
-                        <div className="card-body">
-                            <h3 className="section-title-sm">Bitácora de Entradas y Salidas</h3>
-                            <div className="table-wrapper">
-                                <table>
-                                    <thead>
-                                        <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Motivo</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        {data.inventory.movimientos.map((m, i) => (
-                                            <tr key={i}>
-                                                <td style={{ fontSize: '0.75rem' }}>{new Date(m.fecha).toLocaleString()}</td>
-                                                <td style={{ fontWeight: 600 }}>{m.nombre_producto}</td>
-                                                <td>
-                                                    <span style={{
-                                                        display: 'flex', alignItems: 'center', gap: 4,
-                                                        color: m.tipo === 'entrada' ? '#16a34a' : '#dc2626',
-                                                        fontWeight: 700
-                                                    }}>
-                                                        {m.tipo === 'entrada' ? <MoveDown size={14} /> : <MoveUp size={14} />}
-                                                        {m.tipo.toUpperCase()}
-                                                    </span>
-                                                </td>
-                                                <td style={{ fontWeight: 800 }}>{m.cantidad}</td>
-                                                <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{m.nota}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- PEDIDOS / ESTADOS --- */}
-                {tab === 'pedidos' && (
-                    <div className="card animate-fade-in">
-                        <div className="card-body">
-                            <div style={{ marginBottom: '1rem' }}>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    placeholder="🔍 Buscar pedido por ID o Nombre del Cliente..."
-                                    value={orderSearch}
-                                    onChange={e => setOrderSearch(e.target.value)}
-                                    style={{ maxWidth: 400, width: '100%' }}
-                                />
-                            </div>
-                            <div className="table-wrapper">
-                                <table>
-                                    <thead>
-                                        <tr><th>Pedido</th><th>Cliente</th><th>Total</th><th>Estado Actual</th><th>Cambiar Estado</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredOrders.map(o => (
-                                            <tr key={o.id}>
-                                                <td>#{o.id} <br /><span style={{ fontSize: '0.7rem' }}>{new Date(o.creado_en).toLocaleDateString()}</span></td>
-                                                <td>{o.cliente_nombre || 'WhatsApp'} <br /><span style={{ fontSize: '0.7rem' }}>{o.metodo_pago}</span></td>
-                                                <td style={{ fontWeight: 800 }}>${fmt(o.total)}</td>
-                                                <td><span className={`badge ${STATUS_COLORS[o.estado]}`}>{o.estado}</span></td>
-                                                <td>
-                                                    <select
-                                                        className="form-input"
-                                                        style={{ padding: '4px 8px', fontSize: '0.8rem', minWidth: 120 }}
-                                                        value={o.estado}
-                                                        onChange={(e) => updateOrderStatus(o.id, e.target.value)}
-                                                    >
-                                                        {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- REPORTES GRANULARES --- */}
-                {tab === 'reportes' && (
-                    <div className="animate-slide-up">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                            <div className="auth-tabs" style={{ marginBottom: 0 }}>
-                                <button className={`auth-tab ${reportsTab === 'dia' ? 'active' : ''}`} onClick={() => setReportsTab('dia')}>Día</button>
-                                <button className={`auth-tab ${reportsTab === 'mes' ? 'active' : ''}`} onClick={() => setReportsTab('mes')}>Mes</button>
-                                <button className={`auth-tab ${reportsTab === 'año' ? 'active' : ''}`} onClick={() => setReportsTab('año')}>Año</button>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                                <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <label style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>Desde:</label>
-                                    <input type="date" className="form-input btn-sm" value={dateFilters.desde} onChange={e => setDateFilters({ ...dateFilters, desde: e.target.value })} />
-                                </div>
-                                <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <label style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>Hasta:</label>
-                                    <input type="date" className="form-input btn-sm" value={dateFilters.hasta} onChange={e => setDateFilters({ ...dateFilters, hasta: e.target.value })} />
-                                </div>
-                                <button className="btn btn-primary btn-sm" onClick={loadData}>Filtrar</button>
-                                {(dateFilters.desde || dateFilters.hasta) && (
-                                    <button className="btn btn-ghost btn-sm" onClick={() => { setDateFilters({ desde: '', hasta: '' }); setTimeout(loadData, 0); }}>Limpiar</button>
-                                )}
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {(() => {
-                                if (!data.stats || !data.stats.individual) return null;
-                                const groupedData = {};
-                                data.stats.individual.forEach(sale => {
-                                    const d = new Date(sale.creado_en);
-                                    let key = '';
-                                    if (reportsTab === 'dia') key = d.toLocaleDateString('es-CO');
-                                    else if (reportsTab === 'mes') key = d.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
-                                    else key = d.getFullYear().toString();
-
-                                    if (!groupedData[key]) {
-                                        groupedData[key] = { label: key, pedidos: 0, ingresos: 0, ventas: [] };
-                                    }
-                                    groupedData[key].pedidos += 1;
-                                    groupedData[key].ingresos += Number(sale.total);
-                                    groupedData[key].ventas.push(sale);
-                                });
-
-                                return Object.keys(groupedData).map(k => {
-                                    const group = groupedData[k];
-                                    return (
-                                        <div key={k} className="card">
-                                            <div className="card-header" style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, textTransform: 'capitalize' }}>{group.label}</h4>
-                                                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem' }}>
-                                                    <span className="badge badge-gray">{group.pedidos} pedidos</span>
-                                                    <span className="badge badge-success" style={{ fontWeight: 800 }}>${fmt(group.ingresos)}</span>
-                                                </div>
-                                            </div>
-                                            <div className="card-body" style={{ padding: 0 }}>
-                                                <div className="table-wrapper">
-                                                    <table style={{ margin: 0 }}>
-                                                        <thead>
-                                                            <tr><th>#</th><th>Hora/Fecha</th><th>Cliente</th><th>Total</th></tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {group.ventas.map((v, i) => (
-                                                                <tr key={i}>
-                                                                    <td>#{v.id}</td>
-                                                                    <td>{new Date(v.creado_en).toLocaleString('es-CO')}</td>
-                                                                    <td>{v.cliente_nombre || 'WhatsApp'} <br /><span style={{ fontSize: '0.7rem' }}>{v.metodo_pago}</span></td>
-                                                                    <td style={{ fontWeight: 800, color: 'var(--color-primary)' }}>${fmt(v.total)}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                });
-                            })()}
-                        </div>
-                    </div>
-                )}
-            </main>
-
-            {/* MODAL AJUSTE STOCK */}
-            {adjustingStock && (
-                <div className="modal-overlay" style={{ display: 'flex' }}>
-                    <div className="modal animate-scale-in" style={{ maxWidth: 400 }}>
-                        <div className="modal-header">
-                            <h3 style={{ textTransform: 'capitalize' }}>{adjustingStock.tipo} de Material</h3>
-                            <button className="btn btn-ghost" onClick={() => setAdjustingStock(null)}>X</button>
-                        </div>
-                        <form onSubmit={handleStockAdjust}>
-                            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <p style={{ fontSize: '0.85rem' }}>Producto: <strong>{adjustingStock.nombre}</strong></p>
-                                <div className="form-group">
-                                    <label className="form-label">Cantidad a {adjustingStock.tipo === 'entrada' ? 'sumar' : 'restar'}</label>
-                                    <input
-                                        type="number" className="form-input" required autoFocus
-                                        value={adjustForm.cantidad} onChange={e => setAdjustForm({ ...adjustForm, cantidad: e.target.value })}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Nota / Motivo</label>
-                                    <textarea
-                                        className="form-input" rows="3" placeholder="Ej: Nueva producción o Daño reportado"
-                                        value={adjustForm.nota} onChange={e => setAdjustForm({ ...adjustForm, nota: e.target.value })}
-                                    ></textarea>
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                                    <button type="button" className="btn btn-secondary btn-full" onClick={() => setAdjustingStock(null)}>Cancelar</button>
-                                    <button type="submit" className={`btn btn-full ${adjustingStock.tipo === 'entrada' ? 'btn-success' : 'btn-danger'}`}>
-                                        Confirmar {adjustingStock.tipo === 'entrada' ? 'Entrada' : 'Salida'}
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={loadData}
+              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              title="Refrescar datos"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-    );
-}
+
+        {/* Notification Toast */}
+        {notification && (
+          <div className="bg-emerald-600 text-white text-xs font-bold py-2 px-6 flex items-center justify-center gap-2 animate-fade-in">
+            <CheckCircle className="w-4 h-4" />
+            <span>{notification}</span>
+          </div>
+        )}
+
+        {/* Tab Selector */}
+        <div className="flex border-b border-slate-800 bg-slate-900/50 px-6 gap-2 overflow-x-auto">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-3.5 px-4 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                  active
+                    ? 'border-orange-500 text-orange-400 bg-orange-500/10'
+                    : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-6">
+          
+          {/* TAB 1: PRODUCTOS */}
+          {activeTab === 'productos' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-semibold">
+                  Total de referencias registradas: <strong className="text-white">{products.length}</strong>
+                </span>
+
+                <button
+                  onClick={() => {
+                    setProductForm({
+                      nombre: '',
+                      precio: '',
+                      medidas: '18*9*6',
+                      descripcion: '',
+                      stock: 500,
+                      imagen: '',
+                      categoria: 'Ladrillos'
+                    });
+                    setProductModal({ open: true, product: null, isEdit: false });
+                  }}
+                  className="btn-primary-cta text-xs py-2 px-3.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nuevo Material</span>
+                </button>
+              </div>
+
+              {/* Products Table */}
+              <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5">Material</th>
+                      <th className="p-3.5">Categoría</th>
+                      <th className="p-3.5">Medidas</th>
+                      <th className="p-3.5">Precio Unit. (COP)</th>
+                      <th className="p-3.5">Stock en Patio</th>
+                      <th className="p-3.5 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                    {products.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-900/40 transition-colors">
+                        <td className="p-3.5 font-bold text-white flex items-center gap-3">
+                          <img
+                            src={p.imagen || '/logo.png'}
+                            alt={p.nombre}
+                            className="w-10 h-10 object-cover rounded-lg bg-slate-900 border border-slate-800 shrink-0"
+                            onError={(e) => { e.target.src = '/logo.png'; }}
+                          />
+                          <span>{p.nombre}</span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
+                            {p.categoria}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-slate-400 font-mono">{p.medidas || 'Estándar'}</td>
+                        <td className="p-3.5 font-mono font-bold text-orange-400">
+                          ${Number(p.precio).toLocaleString('es-CO')}
+                          <button
+                            onClick={() => handleQuickPrice(p.id, p.precio)}
+                            className="ml-2 text-slate-500 hover:text-white p-1"
+                            title="Cambiar precio directo"
+                          >
+                            <Edit className="w-3 h-3 inline" />
+                          </button>
+                        </td>
+                        <td className="p-3.5 font-mono">
+                          <span className={`px-2 py-0.5 rounded font-bold ${
+                            p.stock > 100 
+                              ? 'bg-emerald-500/20 text-emerald-400' 
+                              : 'bg-rose-500/20 text-rose-400'
+                          }`}>
+                            {p.stock} unid.
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right space-x-2">
+                          <button
+                            onClick={() => {
+                              setStockModal({
+                                open: true,
+                                product: p,
+                                tipo: 'entrada',
+                                cantidad: '',
+                                nota: 'Ingreso directo desde horno'
+                              });
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-orange-600 text-slate-200 hover:text-white font-semibold transition-colors"
+                          >
+                            Ajustar Stock
+                          </button>
+                          <button
+                            onClick={() => {
+                              setProductForm({
+                                nombre: p.nombre,
+                                precio: p.precio,
+                                medidas: p.medidas || '',
+                                descripcion: p.descripcion || '',
+                                stock: p.stock,
+                                imagen: p.imagen || '',
+                                categoria: p.categoria
+                              });
+                              setProductModal({ open: true, product: p, isEdit: true });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                            title="Editar referencia"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: PEDIDOS */}
+          {activeTab === 'pedidos' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center text-xs text-slate-400">
+                <span>Historial de órdenes recibidas: <strong className="text-white">{orders.length}</strong></span>
+              </div>
+
+              <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5"># Orden</th>
+                      <th className="p-3.5">Cliente</th>
+                      <th className="p-3.5">Fecha</th>
+                      <th className="p-3.5">Materiales Solicitados</th>
+                      <th className="p-3.5">Total (COP)</th>
+                      <th className="p-3.5">Estado del Despacho</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                    {orders.map((o) => (
+                      <tr key={o.id} className="hover:bg-slate-900/40 transition-colors">
+                        <td className="p-3.5 font-bold text-orange-400 font-mono">#{o.id}</td>
+                        <td className="p-3.5">
+                          <div className="font-bold text-white">{o.cliente_nombre || 'Cliente Obra'}</div>
+                          <div className="text-[11px] text-slate-400">{o.telefono || o.direccion_envio}</div>
+                        </td>
+                        <td className="p-3.5 text-slate-400">
+                          {new Date(o.creado_en).toLocaleString('es-CO')}
+                        </td>
+                        <td className="p-3.5">
+                          <div className="space-y-1">
+                            {(o.detalle || []).map((det, i) => (
+                              <div key={i} className="text-[11px] text-slate-300">
+                                • {det.cantidad}x {det.nombre_producto}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-3.5 font-mono font-bold text-white">
+                          ${Number(o.total).toLocaleString('es-CO')}
+                        </td>
+                        <td className="p-3.5">
+                          <select
+                            value={o.estado}
+                            onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                            className="bg-slate-950 border border-slate-800 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-orange-500 text-white"
+                          >
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="Confirmado">Confirmado</option>
+                            <option value="En preparación">En preparación</option>
+                            <option value="En camino">En camino</option>
+                            <option value="Entregado">Entregado</option>
+                            <option value="Cancelado">Cancelado</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: REPORTES DE VENTAS */}
+          {activeTab === 'reportes' && reports && (
+            <div className="space-y-6">
+              
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="glass-card p-5 rounded-2xl border border-slate-800">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                    Ingresos Totales Brutos
+                  </span>
+                  <div className="text-2xl font-black text-orange-400 font-mono mt-1">
+                    ${Number(reports.totalGeneral?.ingresos_totales || 0).toLocaleString('es-CO')}
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">Ventas facturadas</span>
+                </div>
+
+                <div className="glass-card p-5 rounded-2xl border border-slate-800">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                    Total Órdenes Concluidas
+                  </span>
+                  <div className="text-2xl font-black text-white font-mono mt-1">
+                    {reports.totalGeneral?.total_pedidos || 0}
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">Despachos coordinados</span>
+                </div>
+
+                <div className="glass-card p-5 rounded-2xl border border-slate-800">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                    Ticket Promedio
+                  </span>
+                  <div className="text-2xl font-black text-emerald-400 font-mono mt-1">
+                    ${reports.totalGeneral?.total_pedidos > 0 
+                      ? Math.round(reports.totalGeneral.ingresos_totales / reports.totalGeneral.total_pedidos).toLocaleString('es-CO')
+                      : 0}
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">COP por orden</span>
+                </div>
+
+                <div className="glass-card p-5 rounded-2xl border border-slate-800">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                    Rotación de Patio
+                  </span>
+                  <div className="text-2xl font-black text-cyan-400 font-mono mt-1">
+                    Alta
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">Ladrillo tolete y bloque</span>
+                </div>
+              </div>
+
+              {/* Top Products */}
+              <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
+                <h3 className="font-heading font-bold text-sm text-white uppercase tracking-wider">
+                  Top 5 Materiales Más Vendidos
+                </h3>
+                <div className="space-y-2">
+                  {(reports.topProductos || []).map((tp, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-orange-600/20 text-orange-400 font-bold flex items-center justify-center font-mono">
+                          {idx + 1}
+                        </span>
+                        <span className="font-bold text-white">{tp.nombre_producto}</span>
+                      </div>
+                      <div className="font-mono text-slate-300">
+                        <strong className="text-orange-400">{Number(tp.unidades_vendidas).toLocaleString('es-CO')}</strong> unidades
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 4: MOVIMIENTOS DE INVENTARIO */}
+          {activeTab === 'movimientos' && (
+            <div className="space-y-4">
+              <span className="text-xs text-slate-400 font-semibold">
+                Registro de auditoría de entradas y salidas de patio:
+              </span>
+
+              <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5">Fecha</th>
+                      <th className="p-3.5">Tipo</th>
+                      <th className="p-3.5">Material</th>
+                      <th className="p-3.5">Cantidad</th>
+                      <th className="p-3.5">Nota de Control</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-200 font-mono">
+                    {movements.map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-900/40">
+                        <td className="p-3.5 text-slate-400">{new Date(m.fecha).toLocaleString('es-CO')}</td>
+                        <td className="p-3.5">
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
+                            m.tipo === 'entrada' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                          }`}>
+                            {m.tipo}
+                          </span>
+                        </td>
+                        <td className="p-3.5 font-bold text-white font-sans">{m.nombre_producto}</td>
+                        <td className="p-3.5 font-bold">{m.cantidad} unid.</td>
+                        <td className="p-3.5 text-slate-400 font-sans">{m.nota}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+        </div>
+
+      </div>
+
+      {/* Stock Adjustment Modal */}
+      {stockModal.open && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+          <div onClick={() => setStockModal({ ...stockModal, open: false })} className="fixed inset-0 bg-slate-950/80" />
+          <div className="relative bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 z-10 space-y-4">
+            <h4 className="font-heading font-bold text-white text-sm">
+              Ajustar Inventario: {stockModal.product.nombre}
+            </h4>
+
+            <form onSubmit={handleStockSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Tipo de Movimiento</label>
+                <select
+                  value={stockModal.tipo}
+                  onChange={(e) => setStockModal({ ...stockModal, tipo: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                >
+                  <option value="entrada">Entrada (+ Lote nuevo de horno)</option>
+                  <option value="salida">Salida (- Rotura o merma)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Cantidad de Unidades</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={stockModal.cantidad}
+                  onChange={(e) => setStockModal({ ...stockModal, cantidad: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  placeholder="Ej: 500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Motivo / Nota</label>
+                <input
+                  type="text"
+                  value={stockModal.nota}
+                  onChange={(e) => setStockModal({ ...stockModal, nota: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  placeholder="Ej: Remesa #45 patio Vereda Patio Bonito"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStockModal({ ...stockModal, open: false })}
+                  className="flex-1 py-2.5 bg-slate-800 rounded-xl text-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-orange-600 rounded-xl text-white font-bold"
+                >
+                  Guardar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Product Edit / Create Modal */}
+      {productModal.open && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+          <div onClick={() => setProductModal({ ...productModal, open: false })} className="fixed inset-0 bg-slate-950/80" />
+          <div className="relative bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 z-10 space-y-4">
+            <h4 className="font-heading font-bold text-white text-base">
+              {productModal.isEdit ? 'Editar Referencia' : 'Nueva Referencia de Material'}
+            </h4>
+
+            <form onSubmit={handleSaveProduct} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Nombre Comercial</label>
+                <input
+                  type="text"
+                  required
+                  value={productForm.nombre}
+                  onChange={(e) => setProductForm({ ...productForm, nombre: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Precio Unitario (COP)</label>
+                  <input
+                    type="number"
+                    required
+                    value={productForm.precio}
+                    onChange={(e) => setProductForm({ ...productForm, precio: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Categoría</label>
+                  <select
+                    value={productForm.categoria}
+                    onChange={(e) => setProductForm({ ...productForm, categoria: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  >
+                    <option value="Ladrillos">Ladrillos</option>
+                    <option value="Bloques">Bloques</option>
+                    <option value="Fachadas">Fachadas</option>
+                    <option value="Tabletas">Tabletas</option>
+                    <option value="Adoquines">Adoquines</option>
+                    <option value="Tejas">Tejas</option>
+                    <option value="Refractarios">Refractarios</option>
+                    <option value="Agregados">Agregados</option>
+                    <option value="Especiales">Especiales</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Medidas (cm)</label>
+                  <input
+                    type="text"
+                    value={productForm.medidas}
+                    onChange={(e) => setProductForm({ ...productForm, medidas: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                    placeholder="18*9*6"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Stock Inicial</label>
+                  <input
+                    type="number"
+                    value={productForm.stock}
+                    onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">URL de la Imagen</label>
+                <input
+                  type="url"
+                  value={productForm.imagen}
+                  onChange={(e) => setProductForm({ ...productForm, imagen: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  placeholder="https://..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Descripción Técnica</label>
+                <textarea
+                  rows="2"
+                  value={productForm.descripcion}
+                  onChange={(e) => setProductForm({ ...productForm, descripcion: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-white resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProductModal({ ...productModal, open: false })}
+                  className="flex-1 py-2.5 bg-slate-800 rounded-xl text-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-orange-600 rounded-xl text-white font-bold"
+                >
+                  Guardar Material
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

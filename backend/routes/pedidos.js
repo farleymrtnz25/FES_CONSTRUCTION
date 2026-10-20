@@ -1,82 +1,125 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { authMiddleware } = require('../middleware/auth');
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../middleware/auth');
 
-// Ladrillos, bloques y materiales de construcción están EXCLUIDOS de IVA
-// según el Art. 424 del Estatuto Tributario colombiano (E.T.)
-// El ICA es un impuesto al comerciante (municipal), no se cobra al cliente en la factura.
+// POST /api/pedidos — Registrar nuevo pedido y descontar inventario
+router.post('/', async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
 
-// POST /api/pedidos — crear pedido
-router.post('/', authMiddleware, async (req, res) => {
-    const conn = await db.getConnection();
-    try {
-        await conn.beginTransaction();
+    const {
+      cliente_nombre,
+      cliente_telefono,
+      cliente_direccion,
+      ciudad,
+      notas,
+      metodo_pago,
+      productos, // Array de { id, nombre, precio, cantidad }
+      total
+    } = req.body;
 
-        const { productos, metodo_pago = 'WhatsApp', notas = '', tipo_persona = 'Natural' } = req.body;
-        if (!productos || !Array.isArray(productos) || productos.length === 0) {
-            return res.status(400).json({ error: 'El pedido debe incluir al menos un producto' });
-        }
-
-        const subtotal = productos.reduce((sum, p) => sum + (p.precio * p.cantidad), 0);
-        const iva = 0; // Excluido de IVA - Art. 424 E.T. (ladrillos, bloques, materiales de construcción)
-        const ica = 0; // ICA no aplica al consumidor final en la factura
-        const total = subtotal;
-
-        const [pedidoResult] = await conn.execute(
-            'INSERT INTO pedidos (usuario_id, tipo_persona, subtotal, iva, ica, total, metodo_pago, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [req.user.id, tipo_persona, subtotal, iva, ica, total, metodo_pago, notas]
-        );
-        const pedidoId = pedidoResult.insertId;
-
-        for (const item of productos) {
-            const lineSubtotal = item.precio * item.cantidad;
-            await conn.execute(
-                'INSERT INTO detalle_pedido (pedido_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
-                [pedidoId, item.id, item.nombre, item.precio, item.cantidad, lineSubtotal]
-            );
-            // Log movimiento de inventario (salida)
-            await conn.execute(
-                'INSERT INTO movimientos_inventario (producto_id, nombre_producto, tipo, cantidad, nota) VALUES (?, ?, ?, ?, ?)',
-                [item.id, item.nombre, 'salida', item.cantidad, `Pedido #${pedidoId}`]
-            );
-            // Reducir stock
-            await conn.execute(
-                'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
-                [item.cantidad, item.id]
-            );
-        }
-
-        await conn.commit();
-        res.status(201).json({
-            message: 'Pedido creado exitosamente',
-            pedido: { id: pedidoId, subtotal, iva, ica, total, metodo_pago, estado: 'Pendiente', tipo_persona }
-        });
-    } catch (error) {
-        await conn.rollback();
-        console.error('Error al crear pedido:', error);
-        res.status(500).json({ error: 'Error al procesar el pedido' });
-    } finally {
-        conn.release();
+    if (!productos || !Array.isArray(productos) || productos.length === 0) {
+      return res.status(400).json({ error: 'El carrito no contiene productos' });
     }
+
+    // Identificar si viene autenticado
+    let usuario_id = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+        usuario_id = decoded.id;
+      } catch (err) {
+        // Usuario invitado
+      }
+    }
+
+    // 1. Insertar pedido en `pedidos`
+    const [pedidoResult] = await connection.execute(
+      `INSERT INTO pedidos (usuario_id, total, estado, metodo_pago, direccion_envio, telefono, notas, creado_en)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        usuario_id,
+        Number(total),
+        'Pendiente',
+        metodo_pago || 'WhatsApp / Contraentrega',
+        `${cliente_direccion || 'No especificada'} (${ciudad || 'Bogotá / Cundinamarca'})`,
+        cliente_telefono || '',
+        notas || `Cliente: ${cliente_nombre || 'General'}`
+      ]
+    );
+
+    const pedidoId = pedidoResult.insertId;
+
+    // 2. Insertar detalles y actualizar stock
+    for (const item of productos) {
+      const cantidad = Number(item.cantidad) || 1;
+      const precioUnit = Number(item.precio) || 0;
+      const subtotal = cantidad * precioUnit;
+
+      await connection.execute(
+        `INSERT INTO detalle_pedido (pedido_id, producto_id, nombre_producto, cantidad, precio_unitario, subtotal)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [pedidoId, item.id || null, item.nombre, cantidad, precioUnit, subtotal]
+      );
+
+      // Descontar inventario si el producto existe
+      if (item.id) {
+        await connection.execute(
+          `UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?`,
+          [cantidad, item.id]
+        );
+
+        await connection.execute(
+          `INSERT INTO movimientos_inventario (producto_id, nombre_producto, tipo, cantidad, nota)
+           VALUES (?, ?, 'salida', ?, ?)`,
+          [item.id, item.nombre, cantidad, `Venta Pedido #${pedidoId}`]
+        );
+      }
+    }
+
+    await connection.commit();
+    res.status(201).json({
+      success: true,
+      message: 'Pedido registrado con éxito',
+      pedidoId,
+      total
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error al registrar pedido:', error);
+    res.status(500).json({ error: 'Error al procesar el pedido' });
+  } finally {
+    connection.release();
+  }
 });
 
-// GET /api/pedidos/mis-pedidos — historial del usuario autenticado
-router.get('/mis-pedidos', authMiddleware, async (req, res) => {
-    try {
-        const [pedidos] = await db.execute(
-            'SELECT * FROM pedidos WHERE usuario_id = ? ORDER BY creado_en DESC',
-            [req.user.id]
-        );
-        for (const p of pedidos) {
-            const [detalle] = await db.execute('SELECT * FROM detalle_pedido WHERE pedido_id = ?', [p.id]);
-            p.detalle = detalle;
-        }
-        res.json(pedidos);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Error al obtener pedidos' });
+// GET /api/pedidos/mis-pedidos (requiere token)
+router.get('/mis-pedidos', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Inicia sesión para ver tus pedidos' });
+  }
+
+  try {
+    const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+    const [pedidos] = await db.execute(
+      `SELECT * FROM pedidos WHERE usuario_id = ? ORDER BY creado_en DESC`,
+      [decoded.id]
+    );
+
+    for (const p of pedidos) {
+      const [det] = await db.execute('SELECT * FROM detalle_pedido WHERE pedido_id = ?', [p.id]);
+      p.detalle = det;
     }
+
+    res.json(pedidos);
+  } catch (err) {
+    res.status(401).json({ error: 'Sesión no válida' });
+  }
 });
 
 module.exports = router;

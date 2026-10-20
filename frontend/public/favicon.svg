@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EA580C" />
+      <stop offset="100%" stop-color="#C2410C" />
+    </linearGradient>
+  </defs>
+  <!-- Base Brick Background -->
+  <rect width="64" height="64" rx="14" fill="#0F172A" />
+  <rect x="8" y="14" width="48" height="16" rx="3" fill="url(#grad)" />
+  <rect x="8" y="34" width="22" height="16" rx="3" fill="url(#grad)" />
+  <rect x="34" y="34" width="22" height="16" rx="3" fill="url(#grad)" />
+  <!-- Compass / Caliper Engineering Line -->
+  <circle cx="32" cy="32" r="4" fill="#F8FAFC" />
+  <path d="M22 22 L32 32 L42 22" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

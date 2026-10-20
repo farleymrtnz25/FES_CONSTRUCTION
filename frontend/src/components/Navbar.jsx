@@ -1,185 +1,242 @@
-import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Menu, X, User, LogOut, Shield, ChevronDown } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import React, { useState } from 'react';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import logoImg from '../assets/logo.png';
+import { 
+  ShoppingCart, 
+  Sparkles, 
+  User, 
+  LogOut, 
+  LayoutDashboard, 
+  Menu, 
+  X, 
+  Home,
+  Layers,
+  Building2,
+  MapPin,
+  PhoneCall,
+  ShieldCheck,
+  Mail,
+  Phone
+} from 'lucide-react';
 
-export default function Navbar({ activeSection, setActiveSection }) {
-    const { user, logout, isAdmin } = useAuth();
-    const { totals, setIsOpen } = useCart();
-    const [mobileOpen, setMobileOpen] = useState(false);
-    const [scrolled, setScrolled] = useState(false);
-    const [userMenuOpen, setUserMenuOpen] = useState(false);
+const NAV_ITEMS = [
+  { id: 'home', label: 'Inicio', icon: Home },
+  { id: 'catalogo', label: 'Catálogo (23)', icon: Layers },
+  { id: 'cotizador', label: 'Cotizador IA', icon: Sparkles, isAI: true },
+  { id: 'planta', label: 'Nuestra Planta', icon: Building2 },
+  { id: 'resenas', label: 'Ficha Google & Reseñas', icon: MapPin },
+  { id: 'contacto', label: 'Contacto y Despachos', icon: PhoneCall },
+];
 
-    useEffect(() => {
-        const handler = () => setScrolled(window.scrollY > 10);
-        window.addEventListener('scroll', handler);
-        return () => window.removeEventListener('scroll', handler);
-    }, []);
+export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onViewOrders }) => {
+  const { cartCount, cartTotal, setIsCartOpen } = useCart();
+  const { user, isAdmin, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-    const navItems = [
-        { key: 'inicio', label: 'Inicio' },
-        { key: 'productos', label: 'Productos' },
-        { key: 'nosotros', label: 'Nosotros' },
-        { key: 'contacto', label: 'Contacto' },
-    ];
+  const handleTabClick = (tabId) => {
+    onSelectTab(tabId);
+    setMobileMenuOpen(false);
+  };
 
-    const navigate = (section) => {
-        setActiveSection(section);
-        setMobileOpen(false);
-        setUserMenuOpen(false);
-    };
+  return (
+    <header className="fes-header">
+      {/* 1. Barra Institucional Superior */}
+      <div className="fes-topbar">
+        <div className="fes-container flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-amber-400">
+              <ShieldCheck className="w-4 h-4" />
+              Fábrica Directa • Norma NSR-10
+            </span>
+            <span className="hidden md:inline-flex items-center gap-1.5 text-slate-300">
+              <MapPin className="w-3.5 h-3.5 text-orange-400" />
+              Ladrillera San Luis — Vereda Patio Bonito
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <a href="tel:+573208216369" className="hover:text-white inline-flex items-center gap-1 text-slate-300 font-medium">
+              <Phone className="w-3.5 h-3.5 text-orange-400" />
+              +57 320 821 6369
+            </a>
+            <a href="mailto:frlmrtnz@gmail.com" className="hidden sm:inline-flex items-center gap-1 hover:text-white text-slate-300 font-medium">
+              <Mail className="w-3.5 h-3.5 text-orange-400" />
+              frlmrtnz@gmail.com
+            </a>
+          </div>
+        </div>
+      </div>
 
-    const handleLogout = () => { logout(); navigate('inicio'); };
+      {/* 2. Encabezado Principal */}
+      <div className="fes-container fes-header-main">
+        {/* Marca y Logo */}
+        <button 
+          onClick={() => handleTabClick('home')} 
+          className="flex items-center gap-3.5 text-left cursor-pointer group bg-transparent border-0"
+        >
+          <div className="w-12 h-12 rounded-xl bg-white p-1.5 flex items-center justify-center shadow-md shrink-0 overflow-hidden border-2 border-orange-500">
+            <img 
+              src={logoImg} 
+              alt="Logo FES Construcción" 
+              className="w-full h-full object-contain"
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-heading text-xl sm:text-2xl font-black tracking-tight text-white group-hover:text-orange-400 transition-colors">
+                F.E.S. CONSTRUCCIÓN
+              </span>
+              <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase bg-orange-500/20 text-orange-300 border border-orange-500/40">
+                Ingeniería IA
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 font-medium">
+              Materiales Estructurales de Arcilla Cocida y Agregados
+            </p>
+          </div>
+        </button>
 
-    return (
-        <>
-            <header className={`navbar${scrolled ? ' scrolled' : ''}`} id="main-navbar">
-                <div className="navbar-inner">
-                    {/* Logo */}
-                    <button className="navbar-logo" onClick={() => navigate('inicio')} aria-label="Inicio">
-                        <img src={logoImg} alt="F.E.S. Construcción" onError={e => { e.target.style.display = 'none'; }} />
-                        <span className="navbar-logo-text">F.E.S. Construcción</span>
-                    </button>
+        {/* Acciones Derecha */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* CTA Principal Único (Requisito 20) */}
+          <button 
+            onClick={() => handleTabClick('cotizador')} 
+            className="hidden md:inline-flex btn-primary-cta text-xs sm:text-sm py-2.5 px-4"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Cotizar Obra con IA</span>
+          </button>
 
-                    {/* Desktop Nav */}
-                    <nav className="navbar-nav" aria-label="Navegación principal">
-                        {navItems.map(item => (
-                            <button
-                                key={item.key}
-                                className={`nav-link${activeSection === item.key ? ' active' : ''}`}
-                                onClick={() => navigate(item.key)}
-                            >
-                                {item.label}
-                            </button>
-                        ))}
-                        {isAdmin && (
-                            <button
-                                className={`nav-link${activeSection === 'admin' ? ' active' : ''}`}
-                                onClick={() => navigate('admin')}
-                                style={{ color: '#d97706', fontWeight: 700 }}
-                            >
-                                <Shield size={14} style={{ marginRight: 4, display: 'inline' }} />
-                                Admin
-                            </button>
-                        )}
-                    </nav>
+          {/* Botón Carrito con Total */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            aria-label="Abrir carrito de compras"
+            className="relative flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white transition-all cursor-pointer"
+          >
+            <div className="relative">
+              <ShoppingCart className="w-5 h-5 text-orange-400" />
+              {cartCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-orange-600 text-white font-extrabold text-[11px] min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow">
+                  {cartCount}
+                </span>
+              )}
+            </div>
+            <div className="hidden sm:block text-left leading-tight">
+              <span className="text-[10px] text-slate-400 block uppercase font-bold">Tu Pedido</span>
+              <span className="text-xs font-mono font-extrabold text-white">
+                ${cartTotal.toLocaleString('es-CO')}
+              </span>
+            </div>
+          </button>
 
-                    {/* Actions */}
-                    <div className="navbar-actions">
-                        {/* Cart */}
-                        <button className="cart-btn" onClick={() => setIsOpen(true)} aria-label="Abrir carrito">
-                            <ShoppingCart size={22} />
-                            {totals.count > 0 && (
-                                <span className="cart-badge" aria-live="polite">{totals.count}</span>
-                            )}
-                        </button>
+          {/* Usuario / Admin */}
+          {user ? (
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  onClick={onOpenAdmin}
+                  className={`flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer ${
+                    currentTab === 'admin'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400'
+                      : 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
+                  }`}
+                  title="Abrir Panel de Administración"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span className="hidden sm:inline">Panel Admin</span>
+                </button>
+              )}
+              <button
+                onClick={onViewOrders}
+                className="hidden sm:flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-2.5 rounded-xl transition-all cursor-pointer"
+              >
+                <User className="w-4 h-4 text-orange-400" />
+                <span className="truncate max-w-[110px]">{user.nombre.split(' ')[0]}</span>
+              </button>
+              <button
+                onClick={logout}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
+            >
+              <User className="w-4 h-4 text-orange-400" />
+              <span>Ingresar</span>
+            </button>
+          )}
 
-                        {/* User Menu */}
-                        {user ? (
-                            <div style={{ position: 'relative' }}>
-                                <button
-                                    className="btn btn-ghost btn-sm"
-                                    style={{ gap: 6 }}
-                                    onClick={() => setUserMenuOpen(p => !p)}
-                                    aria-expanded={userMenuOpen}
-                                >
-                                    <div style={{
-                                        width: 28, height: 28, borderRadius: '50%',
-                                        background: 'linear-gradient(135deg,#d97706,#ea580c)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        color: 'white', fontSize: '.8rem', fontWeight: 800
-                                    }}>
-                                        {user.nombre.charAt(0).toUpperCase()}
-                                    </div>
-                                    <span style={{ fontSize: '0.875rem', fontWeight: 600, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {user.nombre.split(' ')[0]}
-                                    </span>
-                                    <ChevronDown size={14} />
-                                </button>
+          {/* Botón Menú Móvil */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-2.5 rounded-xl bg-slate-800 text-white hover:bg-slate-700 border border-slate-700 cursor-pointer"
+            aria-label="Abrir menú de navegación"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
 
-                                {userMenuOpen && (
-                                    <div style={{
-                                        position: 'absolute', right: 0, top: '110%',
-                                        background: 'white', borderRadius: 12,
-                                        boxShadow: '0 10px 40px rgba(0,0,0,.15)', border: '1px solid #e5e7eb',
-                                        minWidth: 180, zIndex: 200, padding: '6px',
-                                        animation: 'slideDown 200ms ease both'
-                                    }}>
-                                        <button className="mobile-nav-link" onClick={() => navigate('perfil')} style={{ borderRadius: 8 }}>
-                                            <User size={16} /> Mi Perfil
-                                        </button>
-                                        {isAdmin && (
-                                            <button className="mobile-nav-link" onClick={() => navigate('admin')} style={{ borderRadius: 8, color: '#d97706' }}>
-                                                <Shield size={16} /> Panel Admin
-                                            </button>
-                                        )}
-                                        <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e5e7eb' }} />
-                                        <button className="mobile-nav-link" onClick={handleLogout} style={{ borderRadius: 8, color: '#dc2626' }}>
-                                            <LogOut size={16} /> Cerrar sesión
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <button className="btn btn-primary btn-sm" onClick={() => navigate('auth')}>
-                                Ingresar
-                            </button>
-                        )}
-
-                        {/* Mobile toggle */}
-                        <button
-                            className="mobile-menu-btn"
-                            onClick={() => setMobileOpen(p => !p)}
-                            aria-label="Menú"
-                            aria-expanded={mobileOpen}
-                        >
-                            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-                        </button>
-                    </div>
-                </div>
-            </header>
-
-            {/* Mobile Nav */}
-            {mobileOpen && (
-                <>
-                    <div style={{ position: 'fixed', inset: 0, zIndex: 97 }} onClick={() => setMobileOpen(false)} />
-                    <nav className="mobile-nav" aria-label="Navegación móvil">
-                        {navItems.map(item => (
-                            <button
-                                key={item.key}
-                                className={`mobile-nav-link${activeSection === item.key ? ' active' : ''}`}
-                                onClick={() => navigate(item.key)}
-                            >
-                                {item.label}
-                            </button>
-                        ))}
-                        {isAdmin && (
-                            <button className="mobile-nav-link" onClick={() => navigate('admin')} style={{ color: '#d97706' }}>
-                                <Shield size={16} /> Panel Admin
-                            </button>
-                        )}
-                        <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid var(--color-border)' }} />
-                        {user ? (
-                            <>
-                                <button className="mobile-nav-link" onClick={() => navigate('perfil')}>
-                                    <User size={16} /> Mi Perfil
-                                </button>
-                                <button className="mobile-nav-link" onClick={handleLogout} style={{ color: '#dc2626' }}>
-                                    <LogOut size={16} /> Cerrar sesión
-                                </button>
-                            </>
-                        ) : (
-                            <button className="mobile-nav-link" onClick={() => navigate('auth')}>
-                                <User size={16} /> Ingresar / Registrarse
-                            </button>
-                        )}
-                        <button className="mobile-nav-link" onClick={() => { setIsOpen(true); setMobileOpen(false); }}>
-                            <ShoppingCart size={16} /> Carrito ({totals.count})
-                        </button>
-                    </nav>
-                </>
+      {/* 3. Barra de Pestañas Independientes (Desktop & Tablet) */}
+      <div className="fes-tabbar-wrapper">
+        <div className="fes-container">
+          <nav className="fes-tabbar" aria-label="Pestañas principales del sitio">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = currentTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleTabClick(item.id)}
+                  className={`fes-tab-btn ${active ? 'active' : ''} ${item.isAI ? 'ai-tab' : ''}`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+            {isAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className={`fes-tab-btn ${currentTab === 'admin' ? 'active' : ''}`}
+              >
+                <LayoutDashboard className="w-4 h-4 shrink-0" />
+                <span>Administración</span>
+              </button>
             )}
-        </>
-    );
-}
+          </nav>
+        </div>
+      </div>
+
+      {/* Menú Desplegable Móvil */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden bg-slate-900 border-b-2 border-orange-500 px-6 py-5 space-y-3 shadow-2xl">
+          <div className="grid grid-cols-1 gap-2">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = currentTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleTabClick(item.id)}
+                  className={`w-full text-left py-3 px-4 rounded-xl text-sm font-bold flex items-center gap-3 transition-colors ${
+                    active ? 'bg-orange-600 text-white' : 'bg-slate-800/80 text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 text-orange-400" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </header>
+  );
+};

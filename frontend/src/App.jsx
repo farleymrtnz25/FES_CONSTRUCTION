@@ -1,84 +1,192 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from './components/Navbar';
-import HeroSection from './components/HeroSection';
-import ProductsPage from './components/ProductsPage';
-import CartSidebar from './components/CartSidebar';
-import CheckoutPage from './components/CheckoutPage';
-import AuthPage from './components/AuthPage';
-import UserProfile from './components/UserProfile';
-import AdminDashboard from './components/AdminDashboard';
-import Footer from './components/Footer';
-import AboutPage from './components/AboutPage';
-import ContactPage from './components/ContactPage';
-import LegalPage from './components/LegalPage';
-import MobileBottomNav from './components/MobileBottomNav';
-import SplashScreen from './components/SplashScreen';
-import { useAuth } from './context/AuthContext';
-import { useCart } from './context/CartContext';
-import { isMobileApp } from './config';
-import logoImg from './assets/logo.png';
+import { CartProvider } from './context/CartContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { Navbar } from './components/Navbar';
+import { HomeTab } from './components/HomeTab';
+import { ProductsPage } from './components/ProductsPage';
+import { AICivilQuoter } from './components/AICivilQuoter';
+import { PlantTab } from './components/PlantTab';
+import { GoogleBusinessCard } from './components/GoogleBusinessCard';
+import { ContactSection } from './components/ContactSection';
+import { Footer } from './components/Footer';
+import { CartSidebar } from './components/CartSidebar';
+import { CheckoutModal } from './components/CheckoutModal';
+import { AdminDashboard } from './components/AdminDashboard';
+import { AuthModal } from './components/AuthModal';
+import { CookieBanner } from './components/CookieBanner';
+import { LegalModals } from './components/LegalModals';
+import { FloatingWhatsApp } from './components/FloatingWhatsApp';
+import { NotFoundPage } from './components/NotFoundPage';
 
-export default function App() {
+const VALID_TABS = ['home', 'catalogo', 'cotizador', 'planta', 'resenas', 'contacto'];
+
+function MainApp() {
   const { user, isAdmin } = useAuth();
-  const { setIsOpen: setMenuOpen } = useCart();
-  const [activeSection, setActiveSection] = useState('inicio');
-  const [showSplash, setShowSplash] = useState(isMobileApp);
+  const [currentTab, setCurrentTab] = useState('home');
+  const [selectedCatalogCategory, setSelectedCatalogCategory] = useState('Todos');
+  const [aiInitialQuery, setAiInitialQuery] = useState('');
+  
+  // Modals state
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [legalModal, setLegalModal] = useState({ open: false, type: null });
+  const [is404, setIs404] = useState(false);
 
-  // Scroll to top on section change
+  // Sync tab with URL hash
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [activeSection]);
+    const handleHash = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash === '404') {
+        setIs404(true);
+      } else if (VALID_TABS.includes(hash)) {
+        setIs404(false);
+        setCurrentTab(hash);
+      } else if (!hash) {
+        setIs404(false);
+        setCurrentTab('home');
+      }
+    };
 
-  const renderContent = () => {
-    switch (activeSection) {
-      case 'inicio': return <HeroSection onNavigate={setActiveSection} />;
-      case 'productos': return <ProductsPage />;
-      case 'nosotros': return <AboutPage />;
-      case 'contacto': return <ContactPage />;
-      case 'auth': return <AuthPage onSuccess={() => setActiveSection('inicio')} />;
-      case 'perfil': return <UserProfile />;
-      case 'checkout': return <CheckoutPage onBack={() => setActiveSection('productos')} onOrderComplete={() => setActiveSection('perfil')} />;
-      case 'admin': return isAdmin ? <AdminDashboard /> : <HeroSection onNavigate={setActiveSection} />;
-      case 'legal_privacidad': return <LegalPage policyId="privacidad" onBack={() => setActiveSection('inicio')} />;
-      case 'legal_terminos': return <LegalPage policyId="terminos" onBack={() => setActiveSection('inicio')} />;
-      case 'legal_garantia': return <LegalPage policyId="garantia" onBack={() => setActiveSection('inicio')} />;
-      case 'legal_sic': return <LegalPage policyId="sic" onBack={() => setActiveSection('inicio')} />;
-      default: return <HeroSection onNavigate={setActiveSection} />;
-    }
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
+  const handleSelectTab = (tabId) => {
+    setIs404(false);
+    setCurrentTab(tabId);
+    window.location.hash = tabId;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleAskAIAboutProduct = (product) => {
+    setAiInitialQuery(
+      `Quiero calcular cantidades y presupuesto para ${product.nombre} (Medidas: ${product.medidas}, Precio: $${product.precio} COP). ¿Cuántas unidades necesito para 100 metros cuadrados y en cuánto sale en total?`
+    );
+    handleSelectTab('cotizador');
+  };
+
+  if (is404) {
+    return (
+      <div className="fes-app-shell">
+        <Navbar 
+          currentTab={currentTab}
+          onSelectTab={handleSelectTab}
+          onOpenAuth={() => setAuthModalOpen(true)}
+          onOpenAdmin={() => setAdminModalOpen(true)}
+          onViewOrders={() => setCheckoutModalOpen(true)}
+        />
+        <main className="fes-main-content fes-container">
+          <NotFoundPage onGoHome={() => handleSelectTab('home')} />
+        </main>
+        <Footer 
+          onOpenLegal={(type) => setLegalModal({ open: true, type })} 
+          onNavigate={handleSelectTab}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className={`app-root${isMobileApp ? ' mobile-app' : ''}`}>
-      {/* Splash screen de bienvenida en la app móvil */}
-      {showSplash && (
-        <SplashScreen onFinish={() => setShowSplash(false)} />
-      )}
+    <div className="fes-app-shell">
+      
+      {/* 1. Encabezado y Barra de Pestañas Independientes */}
+      <Navbar 
+        currentTab={currentTab}
+        onSelectTab={(tab) => {
+          if (tab === 'catalogo') {
+            setSelectedCatalogCategory('Todos');
+          }
+          handleSelectTab(tab);
+        }}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenAdmin={() => setAdminModalOpen(true)}
+        onViewOrders={() => setCheckoutModalOpen(true)}
+      />
 
-      {/* En mobile app: navbar simplificado con logo; en web: navbar completo */}
-      {isMobileApp ? (
-        <header className="mobile-top-bar">
-          <img src={logoImg} alt="Logo" className="mobile-top-bar-logo" />
-          <span className="mobile-top-bar-title">F.E.S. Construcción</span>
-        </header>
-      ) : (
-        <Navbar activeSection={activeSection} setActiveSection={setActiveSection} />
-      )}
+      {/* 2. Área Principal de la Pestaña Activa */}
+      <main className="fes-main-content">
+        <div className="fes-container">
+          {currentTab === 'home' && (
+            <HomeTab 
+              onNavigate={handleSelectTab} 
+              onSelectCategory={(cat) => setSelectedCatalogCategory(cat)}
+            />
+          )}
 
-      <main id="main-content" className={isMobileApp ? 'mobile-main' : ''}>
-        {renderContent()}
+          {currentTab === 'catalogo' && (
+            <ProductsPage 
+              onAskAIAboutProduct={handleAskAIAboutProduct} 
+              initialCategory={selectedCatalogCategory}
+            />
+          )}
+
+          {currentTab === 'cotizador' && (
+            <AICivilQuoter initialQuery={aiInitialQuery} />
+          )}
+
+          {currentTab === 'planta' && (
+            <PlantTab onNavigate={handleSelectTab} />
+          )}
+
+          {currentTab === 'resenas' && (
+            <GoogleBusinessCard />
+          )}
+
+          {currentTab === 'contacto' && (
+            <ContactSection />
+          )}
+        </div>
       </main>
 
-      <CartSidebar onCheckout={() => setActiveSection('checkout')} />
+      {/* 3. Pie de Página */}
+      <Footer 
+        onOpenLegal={(type) => setLegalModal({ open: true, type })} 
+        onNavigate={handleSelectTab}
+      />
 
-      {/* En mobile app: bottom nav en lugar de footer */}
-      {isMobileApp ? (
-        <MobileBottomNav activeSection={activeSection} setActiveSection={setActiveSection} />
-      ) : (
-        <Footer onNavigate={setActiveSection} />
-      )}
+      {/* 4. Panel Lateral de Carrito y Modales */}
+      <CartSidebar onOpenCheckout={() => setCheckoutModalOpen(true)} />
+      
+      <CheckoutModal 
+        isOpen={checkoutModalOpen} 
+        onClose={() => setCheckoutModalOpen(false)} 
+      />
 
-      {/* Toast Container Placeholder */}
-      <div className="toast-container" id="toast-root" />
+      <AdminDashboard 
+        isOpen={adminModalOpen} 
+        onClose={() => setAdminModalOpen(false)} 
+      />
+
+      <AuthModal 
+        isOpen={authModalOpen} 
+        onClose={() => setAuthModalOpen(false)} 
+      />
+
+      <LegalModals 
+        type={legalModal.type} 
+        isOpen={legalModal.open} 
+        onClose={() => setLegalModal({ open: false, type: null })} 
+      />
+
+      <CookieBanner onOpenPrivacy={() => setLegalModal({ open: true, type: 'privacidad' })} />
+
+      {/* 5. Botón Flotante de WhatsApp */}
+      <FloatingWhatsApp />
+
     </div>
   );
 }
+
+export function App() {
+  return (
+    <AuthProvider>
+      <CartProvider>
+        <MainApp />
+      </CartProvider>
+    </AuthProvider>
+  );
+}
+
+export default App;

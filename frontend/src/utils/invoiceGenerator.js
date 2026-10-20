@@ -1,139 +1,109 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import 'jspdf-autotable';
 
-const fmt = n => n.toLocaleString('es-CO');
+export const generateInvoicePDF = ({ pedidoId, cliente, productos, total, metodoPago, fecha }) => {
+  const doc = new jsPDF();
+  const fechaStr = fecha ? new Date(fecha).toLocaleString('es-CO') : new Date().toLocaleString('es-CO');
 
-export const generateInvoicePDF = (order, user, items) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+  // Header Banner
+  doc.setFillColor(15, 23, 42); // Slate 900
+  doc.rect(0, 0, 210, 42, 'F');
 
-    // -- Header Section --
-    doc.setFontSize(22);
-    doc.setTextColor(30, 30, 30);
-    doc.setFont('helvetica', 'bold');
-    doc.text('FACTURA ELECTRÓNICA DE VENTA', 14, 25);
+  doc.setFillColor(234, 88, 12); // Orange FES
+  doc.rect(0, 40, 210, 2.5, 'F');
 
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 80);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Tu Proyecto S.A.S.', 14, 32);
-    doc.text('NIT: 900.234.567-8 — Régimen Común', 14, 37);
-    doc.text('Calle 123 # 45 - 67, Bogotá, Colombia', 14, 42);
-    doc.text('Tel: +57 320 821 6369 | Email: contacto@tuproyecto.com', 14, 47);
+  // Title
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.text('F.E.S. CONSTRUCCIÓN', 14, 20);
 
-    // -- Resolution Info --
-    doc.setFontSize(7);
-    doc.setTextColor(120, 120, 120);
-    doc.text('Resolución DIAN No. 18760000001 de 2026-01-01', 14, 55);
-    doc.text('Numeración Autorizada de FE-1 hasta FE-10000', 14, 59);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(203, 213, 225);
+  doc.text('Materiales de Ingeniería & Arcillas de Alta Resistencia', 14, 27);
+  doc.text('Vereda Patio Bonito | Tel: +57 320 821 6369 | Correo: frlmrtnz@gmail.com', 14, 34);
 
-    // -- Order Info (Right Box) --
-    doc.setFontSize(11);
-    doc.setTextColor(40, 40, 40);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`No. FACTURA: FE-${order.id}`, pageWidth - 14, 25, { align: 'right' });
+  // Invoice Meta
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`ORDEN DE COMPRA #${pedidoId || 'COT-001'}`, 14, 55);
 
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    const fecha = order.fecha ? new Date(order.fecha) : new Date();
-    doc.text(`Fecha Emisión: ${fecha.toLocaleDateString('es-CO')}`, pageWidth - 14, 32, { align: 'right' });
-    doc.text(`Fecha Vencimiento: ${fecha.toLocaleDateString('es-CO')}`, pageWidth - 14, 37, { align: 'right' });
-    doc.text(`Forma de Pago: Contado`, pageWidth - 14, 42, { align: 'right' });
-    doc.text(`Medio de Pago: ${order.metodo_pago}`, pageWidth - 14, 47, { align: 'right' });
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Fecha de emisión: ${fechaStr}`, 14, 62);
+  doc.text(`Forma de Pago: ${metodoPago || 'WhatsApp / Contraentrega'}`, 14, 68);
 
-    // -- Customer Info Section --
-    doc.setDrawColor(230, 230, 230);
-    doc.line(14, 65, pageWidth - 14, 65);
+  // Client Box
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(14, 74, 182, 30, 3, 3, 'F');
 
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('ADQUIRIENTE:', 14, 75);
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DATOS DEL CLIENTE / RECEPTOR:', 20, 82);
 
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Nombre/Razón Social: ${user?.nombre || 'Consumidor Final'}`, 14, 82);
-    doc.text(`NIT/CC: ${user?.id || '222222222222'}`, 14, 87);
-    doc.text(`Tipo de Persona: ${order.tipo_persona || 'Natural'}`, 14, 92);
-    doc.text(`Email: ${user?.email || 'N/A'}`, 14, 97);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Nombre: ${cliente?.nombre || 'Cliente General'}`, 20, 89);
+  doc.text(`Teléfono: ${cliente?.telefono || 'No especificado'}`, 20, 95);
+  doc.text(`Dirección / Obra: ${cliente?.direccion || 'Vereda Patio Bonito / Despacho'}`, 105, 89);
+  doc.text(`Ciudad: ${cliente?.ciudad || 'Cundinamarca'}`, 105, 95);
 
-    // -- Items Table --
-    const tableRows = items.map(item => [
-        item.id,
-        item.nombre,
-        `$${fmt(item.precio)}`,
-        item.quantity,
-        `$${fmt(item.precio * item.quantity)}`
-    ]);
+  // Items Table
+  const tableData = productos.map((p, idx) => [
+    idx + 1,
+    p.nombre,
+    p.medidas || 'Estándar',
+    Number(p.cantidad).toLocaleString('es-CO'),
+    `$${Number(p.precio).toLocaleString('es-CO')} COP`,
+    `$${(Number(p.cantidad) * Number(p.precio)).toLocaleString('es-CO')} COP`
+  ]);
 
-    autoTable(doc, {
-        startY: 105,
-        head: [['ID', 'Descripción del Producto', 'V. Unitario', 'Cant.', 'Total']],
-        body: tableRows,
-        theme: 'grid',
-        headStyles: { fillColor: [40, 40, 40], textColor: 255, fontSize: 8, fontStyle: 'bold' },
-        styles: { fontSize: 8 },
-        columnStyles: {
-            0: { cellWidth: 15 },
-            1: { cellWidth: 'auto' },
-            2: { halign: 'right' },
-            3: { halign: 'center' },
-            4: { halign: 'right' }
-        }
-    });
+  doc.autoTable({
+    startY: 110,
+    head: [['#', 'Material / Producto', 'Especificación', 'Cantidad', 'Precio Unit.', 'Subtotal']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold'
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 3.5
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      3: { cellWidth: 25, halign: 'center' },
+      4: { cellWidth: 32, halign: 'right' },
+      5: { cellWidth: 36, halign: 'right' }
+    }
+  });
 
-    let finalY = doc.lastAutoTable.finalY + 10;
+  const finalY = doc.lastAutoTable.finalY + 12;
 
-    // -- Totals Section --
-    const rightX = pageWidth - 14;
-    doc.setFontSize(9);
+  // Total Summary Box
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(115, finalY, 81, 28, 2, 2, 'F');
 
-    const subtotal = order.subtotal || order.total;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(71, 85, 105);
+  doc.text('TOTAL A PAGAR:', 122, finalY + 11);
 
-    const totalsData = [
-        ['Subtotal:', `$${fmt(subtotal)}`],
-        ['IVA:', 'No aplica – Art. 424 E.T.'],
-        ['TOTAL:', `$${fmt(order.total)}`]
-    ];
+  doc.setFontSize(14);
+  doc.setTextColor(234, 88, 12); // Orange FES
+  doc.text(`$${Number(total).toLocaleString('es-CO')} COP`, 122, finalY + 21);
 
-    totalsData.forEach((row, i) => {
-        const isTotal = i === 2;
-        doc.setFont('helvetica', isTotal ? 'bold' : 'normal');
-        if (isTotal) doc.setFontSize(12);
-        else if (i === 1) { doc.setFontSize(8); doc.setTextColor(120, 120, 120); }
-        else { doc.setFontSize(9); doc.setTextColor(40, 40, 40); }
-        doc.text(row[0], rightX - 60, finalY + (i * 7));
-        doc.text(row[1], rightX, finalY + (i * 7), { align: 'right' });
-    });
+  // Footnote & Warranty
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(100, 116, 139);
+  doc.text('Nota técnica: El descargue en obra se coordina según accesibilidad para tractomula o volqueta.', 14, finalY + 45);
+  doc.text('Materiales certificados conforme a la Norma Sismorresistente NSR-10.', 14, finalY + 50);
 
-    // Reset color
-    doc.setTextColor(40, 40, 40);
-
-    // -- Electronic Invoice Details (Bottom) --
-    finalY += 40;
-
-    // CUFE Mock
-    const cufe = Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(100, 100, 100);
-    doc.text('CUFE:', 14, finalY);
-    doc.setFont('helvetica', 'normal');
-    doc.text(cufe, 25, finalY);
-
-    // Mock QR Code Area
-    doc.setDrawColor(0);
-    doc.rect(14, finalY + 5, 30, 30);
-    doc.setFontSize(6);
-    doc.text('MOCK QR CODE', 16, finalY + 22);
-
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Representación gráfica de factura electrónica.', 50, finalY + 15);
-    doc.text('Software de facturación: TuProyecto FE v1.0', 50, finalY + 20);
-
-    // -- Footer --
-    doc.setTextColor(150, 150, 150);
-    doc.text('Esta factura se asimila en todos sus efectos a una letra de cambio según el Art. 774 del Código de Comercio.', pageWidth / 2, pageHeight - 15, { align: 'center' });
-
-    doc.save(`Factura_FE_${order.id}.pdf`);
+  // Save PDF
+  doc.save(`FES-Pedido-${pedidoId || 'orden'}.pdf`);
 };

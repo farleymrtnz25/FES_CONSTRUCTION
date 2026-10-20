@@ -1,174 +1,138 @@
 import React from 'react';
-import { Truck, Award, Leaf, Users, ArrowRight, Star, CheckCircle } from 'lucide-react';
-import heroMaterials from '../assets/hero-materials.png';
+import { 
+  Sparkles, 
+  ShieldCheck, 
+  Truck, 
+  Ruler, 
+  CheckCircle2, 
+  ArrowRight, 
+  Flame 
+} from 'lucide-react';
+import heroMaterialsImg from '../assets/hero-materials.png';
 
-export default function HeroSection({ onNavigate }) {
-    return (
-        <div style={{ overflowX: 'hidden' }}>
-            {/* ── Hero ── */}
-            <section className="hero" aria-labelledby="hero-heading">
-                <div className="hero-bg-gradient" />
-                <div className="hero-orb hero-orb-1" />
-                <div className="hero-orb hero-orb-2" />
+export const HeroSection = () => {
+  return (
+    <section className="relative overflow-hidden bg-blueprint-grid pt-12 pb-20 lg:pt-20 lg:pb-32 border-b border-slate-800/60">
+      
+      {/* Background ambient lighting */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-orange-600/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/3 right-10 w-[300px] h-[250px] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-                <div className="hero-inner">
-                    <div className="animate-slide-up">
-                        <div className="hero-badge">
-                            <Star size={12} fill="currentColor" />
-                            Materiales artesanales de alta calidad
-                        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+          
+          {/* Left Column: Sales Copy & Primary CTA */}
+          <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
+            
+            {/* Certifications Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-orange-500/30 text-xs font-semibold text-orange-300 shadow-inner">
+              <Flame className="w-4 h-4 text-orange-500 animate-pulse" />
+              <span>Directo de Horno • Calidad Sismorresistente NSR-10</span>
+            </div>
 
-                        <h1 id="hero-heading">
-                            Construye con la{' '}
-                            <span className="gradient-text">Tradición de Colombia</span>
-                        </h1>
+            {/* Main Headline */}
+            <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.1]">
+              Materiales de Construcción de Alta Resistencia con{' '}
+              <span className="text-gradient-orange">Cotización Precisa por IA</span>
+            </h1>
 
-                        <p>
-                            F.E.S. Construcción conecta a constructores directamente con productores artesanales de Nemocón.
-                            Materiales en arcilla de primera calidad, sin intermediarios.
-                        </p>
+            {/* Subtitle */}
+            <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto lg:mx-0 font-normal leading-relaxed">
+              Venta directa de fábrica en Cundinamarca y Boyacá. Ladrillo tolete, bloques estructurales, tejas y bloquelón. 
+              <strong className="text-white font-semibold"> Calcula cantidades exactas por m² y presupuesto instantáneo</strong> con nuestro Asesor de Ingeniería.
+            </p>
 
-                        <div className="hero-actions">
-                            <button className="btn btn-primary btn-lg" onClick={() => onNavigate('productos')}>
-                                Ver Catálogo <ArrowRight size={18} />
-                            </button>
-                            <button className="btn btn-secondary btn-lg" style={{ color: 'rgba(255,255,255,.8)', borderColor: 'rgba(255,255,255,.3)' }} onClick={() => onNavigate('nosotros')}>
-                                Nuestra Historia
-                            </button>
-                        </div>
+            {/* Primary Action Row (Requisito 20: Single Primary CTA) */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+              <a 
+                href="#cotizador-ia" 
+                className="btn-primary-cta w-full sm:w-auto text-base group"
+              >
+                <Sparkles className="w-5 h-5 text-amber-200 group-hover:rotate-12 transition-transform" />
+                <span>Cotizar Proyecto con IA</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </a>
 
-                        <div className="hero-stats">
-                            {[
-                                { num: '10+', label: 'Productos disponibles' },
-                                { num: '100%', label: 'Arcilla artesanal' },
-                                { num: '24h', label: 'Atención WhatsApp' },
-                            ].map(stat => (
-                                <div key={stat.label}>
-                                    <div className="hero-stat-num">{stat.num}</div>
-                                    <div className="hero-stat-label">{stat.label}</div>
-                                </div>
-                            ))}
-                        </div>
+              <a 
+                href="#catalogo" 
+                className="btn-secondary w-full sm:w-auto text-sm"
+              >
+                Ver Catálogo de Precios
+              </a>
+            </div>
+
+            {/* Quick Guarantees (Trust Builders) */}
+            <div className="pt-4 grid grid-cols-3 gap-2 border-t border-slate-800/80 max-w-xl mx-auto lg:mx-0 text-left">
+              <div className="flex items-center gap-2 text-xs text-slate-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Rotura mínima &lt; 2%</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-300">
+                <Truck className="w-4 h-4 text-orange-400 shrink-0" />
+                <span>Despacho en obra</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-300">
+                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>Norma NSR-10</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Right Column: Hero Visual Showcase */}
+          <div className="lg:col-span-5 relative">
+            <div className="relative mx-auto max-w-md lg:max-w-none">
+              
+              {/* Outer decorative glowing ring */}
+              <div className="absolute -inset-1.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-3xl blur-xl opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+              
+              {/* Image Container with alt text (Requisito 10 & 11) */}
+              <div className="relative glass-card overflow-hidden rounded-2xl border border-slate-700/80 shadow-2xl bg-slate-900/90">
+                <img 
+                  src={heroMaterialsImg} 
+                  alt="Ladrillos y materiales de construcción de alta calidad en FES Construcción" 
+                  className="w-full h-80 sm:h-96 object-cover object-center transform hover:scale-105 transition-transform duration-700"
+                  loading="eager"
+                  width="600"
+                  height="400"
+                />
+
+                {/* Engineering Overlay Badge */}
+                <div className="absolute bottom-4 left-4 right-4 glass-panel p-4 rounded-xl border border-slate-700/90 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] font-bold tracking-wider text-orange-400 uppercase">
+                        Patio de Despacho
+                      </span>
+                      <h2 className="text-sm font-bold text-white font-heading">
+                        Arcilla Cocida Tipo Tolete
+                      </h2>
                     </div>
-
-                    <div className="hero-image animate-fade-in">
-                        <img
-                            src={heroMaterials}
-                            alt="Materiales de construcción en arcilla de F.E.S."
-                        />
-                        <div className="hero-image-badge">
-                            <div style={{ width: 36, height: 36, borderRadius: 8, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <CheckCircle size={20} color="#d97706" />
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>Calidad Garantizada</div>
-                                <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Certificado artesanal</div>
-                            </div>
-                        </div>
+                    <div className="text-right">
+                      <span className="text-xs text-slate-400 block">Resistencia</span>
+                      <span className="text-sm font-extrabold text-emerald-400 font-mono">15 MPa</span>
                     </div>
+                  </div>
                 </div>
-            </section>
 
-            {/* ── Values ── */}
-            <section style={{ padding: '5rem 0', background: 'var(--color-surface)' }}>
-                <div className="container">
-                    <div className="section-header">
-                        <h2 className="section-title">Nuestros <span className="gradient-text">Valores</span></h2>
-                        <p className="section-subtitle">Lo que nos guía en cada proyecto y entrega</p>
-                    </div>
-                    <div className="values-grid">
-                        {[
-                            {
-                                icon: <Leaf size={24} color="white" />,
-                                bg: 'linear-gradient(135deg,#16a34a,#15803d)',
-                                title: 'Innovación con Propósito',
-                                desc: 'Aplicamos herramientas digitales para modernizar un sector tradicional y generar impacto positivo en la economía local.',
-                            },
-                            {
-                                icon: <Users size={24} color="white" />,
-                                bg: 'linear-gradient(135deg,#2563eb,#1d4ed8)',
-                                title: 'Compromiso Local',
-                                desc: 'Fortalecemos la economía regional de Nemocón y representamos el potencial artesanal de nuestra comunidad.',
-                            },
-                            {
-                                icon: <Award size={24} color="white" />,
-                                bg: 'linear-gradient(135deg,#d97706,#ea580c)',
-                                title: 'Calidad y Tradición',
-                                desc: 'Materiales de arcilla con altos estándares de calidad que respetan la historia y dedicación artesanal de generaciones.',
-                            },
-                            {
-                                icon: <Truck size={24} color="white" />,
-                                bg: 'linear-gradient(135deg,#7c3aed,#6d28d9)',
-                                title: 'Entrega Directa',
-                                desc: 'Eliminamos intermediarios conectando directamente productores con constructores para mejores precios y calidad.',
-                            },
-                        ].map((v, i) => (
-                            <div key={i} className="value-card" style={{ animationDelay: `${i * 100}ms` }}>
-                                <div className="value-icon" style={{ background: v.bg }}>{v.icon}</div>
-                                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 'var(--space-3)' }}>{v.title}</h3>
-                                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', lineHeight: 1.6 }}>{v.desc}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
+              </div>
 
-            {/* ── Mission / Vision ── */}
-            <section style={{ padding: '5rem 0', background: 'var(--color-bg)' }}>
-                <div className="container">
-                    <div className="section-header">
-                        <h2 className="section-title">Misión & <span className="gradient-text">Visión</span></h2>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                        {[
-                            {
-                                title: '🎯 Nuestra Misión',
-                                text: 'Facilitamos la venta directa de materiales de construcción en arcilla a través de nuestra plataforma web, creando un canal que elimina intermediarios, mejora la rentabilidad para los productores locales y facilita a constructores el acceso a materiales de alta calidad con historia y tradición.',
-                                accent: '#d97706'
-                            },
-                            {
-                                title: '🔭 Nuestra Visión',
-                                text: 'Proyectamos ser la plataforma digital líder y referente nacional para la comercialización de materiales de construcción en arcilla, expandiendo nuestras actividades para crear un ecosistema completo con soluciones logísticas y financieras para la economía artesanal colombiana.',
-                                accent: '#7c3aed'
-                            }
-                        ].map((item, i) => (
-                            <div key={i} className="card" style={{ borderTop: `4px solid ${item.accent}` }}>
-                                <div className="card-body">
-                                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: 'var(--space-4)' }}>{item.title}</h3>
-                                    <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.8 }}>{item.text}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+              {/* Floating IA Floating Chip */}
+              <div className="absolute -top-4 -right-4 glass-panel px-4 py-2.5 rounded-xl border border-orange-500/40 shadow-xl hidden sm:flex items-center gap-3 animate-pulse-subtle">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400">
+                  <Sparkles className="w-4 h-4" />
                 </div>
-            </section>
+                <div>
+                  <p className="text-[11px] text-slate-400 font-medium">Asesor Inteligente</p>
+                  <p className="text-xs font-bold text-white">Gemini Flash Activo</p>
+                </div>
+              </div>
 
-            {/* ── CTA Strip ── */}
-            <section style={{
-                background: 'linear-gradient(135deg,#d97706,#ea580c)',
-                padding: '4rem 0', textAlign: 'center', color: 'white'
-            }}>
-                <div className="container">
-                    <h2 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '1rem' }}>
-                        ¿Listo para construir con calidad?
-                    </h2>
-                    <p style={{ opacity: .85, marginBottom: '2rem', fontSize: '1.1rem' }}>
-                        Explora nuestro catálogo de materiales artesanales o contáctanos directamente.
-                    </p>
-                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        <button className="btn btn-dark btn-lg" onClick={() => onNavigate('productos')}>
-                            Ver Productos <ArrowRight size={18} />
-                        </button>
-                        <button
-                            className="btn btn-lg"
-                            style={{ background: 'rgba(255,255,255,.2)', color: 'white', borderColor: 'rgba(255,255,255,.5)' }}
-                            onClick={() => window.open('https://wa.me/573208216369', '_blank')}
-                        >
-                            WhatsApp
-                        </button>
-                    </div>
-                </div>
-            </section>
+            </div>
+          </div>
+
         </div>
-    );
-}
+      </div>
+    </section>
+  );
+};
