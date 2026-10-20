@@ -38,7 +38,8 @@ let memStore = {
   pedidos: [],
   detalle_pedido: [],
   movimientos_inventario: [],
-  usuarios: []
+  usuarios: [],
+  resenas: []
 };
 
 function loadFallbackProducts() {
@@ -310,6 +311,32 @@ function executeFallback(sql, params = []) {
     const nextId = memStore.usuarios.length + 2;
     memStore.usuarios.push({ id: nextId, nombre, email, password, rol, creado_en: new Date().toISOString() });
     return [{ insertId: nextId, affectedRows: 1 }];
+  }
+
+  // 8. RESEÑAS
+  if (qUpper.startsWith('SELECT') && qUpper.includes('FROM RESENAS')) {
+    return [[...memStore.resenas].sort((a, b) => Number(b.id) - Number(a.id))];
+  }
+
+  if (qUpper.startsWith('INSERT INTO RESENAS')) {
+    const [nombre, cargo, estrellas, comentario] = params;
+    const nextId = memStore.resenas.reduce((max, r) => Math.max(max, Number(r.id)), 0) + 1;
+    const nueva = {
+      id: nextId,
+      nombre,
+      cargo: cargo || 'Cliente F.E.S. Construcción',
+      estrellas: Number(estrellas) || 5,
+      comentario,
+      creado_en: new Date().toISOString()
+    };
+    memStore.resenas.unshift(nueva);
+    return [{ insertId: nextId, affectedRows: 1 }];
+  }
+
+  if (qUpper.startsWith('DELETE FROM RESENAS')) {
+    const id = Number(params[0]);
+    memStore.resenas = memStore.resenas.filter(r => Number(r.id) !== id);
+    return [{ affectedRows: 1 }];
   }
 
   return [[]];

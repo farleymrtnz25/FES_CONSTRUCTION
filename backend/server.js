@@ -49,6 +49,7 @@ app.use('/api/productos', require('./routes/productos'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/pedidos', require('./routes/pedidos'));
 app.use('/api/ia', require('./routes/ia'));
+app.use('/api/resenas', require('./routes/resenas'));
 
 // Ruta de contacto con Anti-Spam Honeypot y envío al correo frlmrtnz@gmail.com
 app.post('/api/contact', async (req, res) => {

@@ -287,7 +287,7 @@ export const HomeTab = ({ onNavigate, onSelectCategory }) => {
                 Ubicación Verificada y Ventas
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Consulta las reseñas verificadas de ingenieros y maestros de obra, abre la ubicación exacta en Google Maps o Waze y coordina tu pedido por WhatsApp o factura PDF.
+                Comparte tu experiencia dejando una reseña, abre la ubicación exacta en Google Maps o Waze y coordina tu pedido por WhatsApp o factura PDF.
               </p>
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1 text-slate-700">
                 <div><strong>WhatsApp Ventas:</strong> +57 320 821 6369</div>
@@ -299,7 +299,7 @@ export const HomeTab = ({ onNavigate, onSelectCategory }) => {
                 onClick={() => onNavigate('resenas')}
                 className="fes-btn-secondary text-xs py-2.5 px-3"
               >
-                <span>Ver Reseñas</span>
+                <span>Dejar Reseña</span>
               </button>
               <button
                 onClick={() => onNavigate('contacto')}
