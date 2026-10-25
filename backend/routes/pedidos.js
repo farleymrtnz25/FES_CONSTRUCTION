@@ -37,20 +37,80 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // 1. Insertar pedido en `pedidos`
-    const [pedidoResult] = await connection.execute(
-      `INSERT INTO pedidos (usuario_id, total, estado, metodo_pago, direccion_envio, telefono, notas, creado_en)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
+    const totalNum = Number(total) || productos.reduce((acc, p) => acc + (Number(p.precio) * (Number(p.cantidad) || 1)), 0);
+    const subtotal = totalNum;
+    const iva = 0;
+    const ica = 0;
+
+    const notasDetalle = [
+      cliente_nombre ? `Cliente: ${cliente_nombre}` : '',
+      cliente_telefono ? `Tel: ${cliente_telefono}` : '',
+      cliente_direccion ? `Dir: ${cliente_direccion} (${ciudad || 'Bogotá / Cundinamarca'})` : '',
+      notas ? `Nota: ${notas}` : ''
+    ].filter(Boolean).join(' | ');
+
+    // 1. Detectar columnas disponibles en `pedidos` para compatibilidad total
+    let hasDireccion = false;
+    let hasTelefono = false;
+    let hasSubtotal = false;
+
+    try {
+      const [cols] = await connection.execute('SHOW COLUMNS FROM pedidos');
+      if (Array.isArray(cols)) {
+        const colNames = new Set(cols.map(c => (c.Field || '').toLowerCase()));
+        hasDireccion = colNames.has('direccion_envio');
+        hasTelefono = colNames.has('telefono');
+        hasSubtotal = colNames.has('subtotal');
+      }
+    } catch (colErr) {
+      // Ignorar si el motor es fallback
+    }
+
+    let insertQuery;
+    let insertParams;
+
+    if (hasDireccion && hasTelefono) {
+      insertQuery = `INSERT INTO pedidos (usuario_id, subtotal, iva, ica, total, estado, metodo_pago, direccion_envio, telefono, notas, creado_en)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
+      insertParams = [
         usuario_id,
-        Number(total),
+        subtotal,
+        iva,
+        ica,
+        totalNum,
         'Pendiente',
         metodo_pago || 'WhatsApp / Contraentrega',
         `${cliente_direccion || 'No especificada'} (${ciudad || 'Bogotá / Cundinamarca'})`,
         cliente_telefono || '',
-        notas || `Cliente: ${cliente_nombre || 'General'}`
-      ]
-    );
+        notasDetalle || notas || 'Pedido Online'
+      ];
+    } else if (hasSubtotal) {
+      insertQuery = `INSERT INTO pedidos (usuario_id, tipo_persona, subtotal, iva, ica, total, estado, metodo_pago, notas, creado_en)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
+      insertParams = [
+        usuario_id,
+        'Natural',
+        subtotal,
+        iva,
+        ica,
+        totalNum,
+        'Pendiente',
+        metodo_pago || 'WhatsApp / Contraentrega',
+        notasDetalle || 'Pedido Online'
+      ];
+    } else {
+      insertQuery = `INSERT INTO pedidos (usuario_id, total, estado, metodo_pago, notas, creado_en)
+                     VALUES (?, ?, ?, ?, ?, NOW())`;
+      insertParams = [
+        usuario_id,
+        totalNum,
+        'Pendiente',
+        metodo_pago || 'WhatsApp / Contraentrega',
+        notasDetalle || 'Pedido Online'
+      ];
+    }
+
+    const [pedidoResult] = await connection.execute(insertQuery, insertParams);
 
     const pedidoId = pedidoResult.insertId;
 

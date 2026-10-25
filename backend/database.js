@@ -241,18 +241,32 @@ function executeFallback(sql, params = []) {
 
   // 6. PEDIDOS & DETALLE
   if (qUpper.startsWith('INSERT INTO PEDIDOS')) {
-    const [usuario_id, total, estado, metodo_pago, direccion_envio, telefono, notas] = params;
     const nextId = memStore.pedidos.length + 1;
+    const numTotal = params.find(p => typeof p === 'number' && p > 0) || 0;
+    const strNotas = params[params.length - 1] || '';
+    let clienteName = 'Cliente Directo';
+    let tel = '';
+    let dir = '';
+
+    if (typeof strNotas === 'string') {
+      const matchName = strNotas.match(/Cliente:\s*([^|]+)/);
+      if (matchName) clienteName = matchName[1].trim();
+      const matchTel = strNotas.match(/Tel:\s*([^|]+)/);
+      if (matchTel) tel = matchTel[1].trim();
+      const matchDir = strNotas.match(/Dir:\s*([^|]+)/);
+      if (matchDir) dir = matchDir[1].trim();
+    }
+
     memStore.pedidos.unshift({
       id: nextId,
-      usuario_id,
-      total: Number(total),
-      estado: estado || 'Pendiente',
-      metodo_pago,
-      direccion_envio,
-      telefono,
-      notas,
-      cliente_nombre: notas ? notas.replace('Cliente: ', '') : 'Cliente Directo',
+      usuario_id: params[0] || null,
+      total: Number(numTotal),
+      estado: 'Pendiente',
+      metodo_pago: params.find(p => typeof p === 'string' && (p.includes('WhatsApp') || p.includes('Contraentrega') || p.includes('Transferencia') || p.includes('NEQUI'))) || 'WhatsApp',
+      direccion_envio: dir || 'Nemocón / Sabana',
+      telefono: tel || '',
+      notas: strNotas,
+      cliente_nombre: clienteName,
       creado_en: new Date().toISOString()
     });
     return [{ insertId: nextId, affectedRows: 1 }];
@@ -372,10 +386,27 @@ const db = {
   }
 };
 
-// Test inicial no bloqueante
+// Test inicial no bloqueante y auto-migración segura
 pool.getConnection()
-  .then((conn) => {
+  .then(async (conn) => {
     console.log('✅ Conexión exitosa a MySQL (fes_construccion)');
+    try {
+      const [cols] = await conn.query("SHOW COLUMNS FROM pedidos");
+      if (Array.isArray(cols)) {
+        const names = new Set(cols.map(c => (c.Field || '').toLowerCase()));
+        if (!names.has('direccion_envio')) {
+          await conn.query("ALTER TABLE pedidos ADD COLUMN direccion_envio VARCHAR(255) NULL");
+        }
+        if (!names.has('telefono')) {
+          await conn.query("ALTER TABLE pedidos ADD COLUMN telefono VARCHAR(50) NULL");
+        }
+        if (!names.has('cliente_nombre')) {
+          await conn.query("ALTER TABLE pedidos ADD COLUMN cliente_nombre VARCHAR(150) NULL");
+        }
+      }
+    } catch (migErr) {
+      console.warn('Nota de verificación de columnas:', migErr.message);
+    }
     conn.release();
   })
   .catch(() => {

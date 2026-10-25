@@ -133,8 +133,9 @@ export const AuthModal = ({ isOpen, onClose }) => {
         </div>
 
         {/* Development Tip */}
-        <div className="mt-3 p-2 rounded bg-slate-950/80 border border-slate-800 text-[10px] text-slate-500 text-center">
-          Admin de pruebas: <span className="text-slate-300 font-mono">admin@fes.com</span> / <span className="text-slate-300 font-mono">Admin1234!</span>
+        <div className="mt-3 p-2 rounded bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 text-center leading-relaxed">
+          Acceso Administrador: <span className="text-orange-400 font-mono font-bold">admin@fes.com</span> o <span className="text-orange-400 font-mono font-bold">frlmrtnz@gmail.com</span><br/>
+          Clave: <span className="text-slate-200 font-mono font-bold">Admin1234!</span> o <span className="text-slate-200 font-mono font-bold">admin123</span>
         </div>
       </div>
     </div>

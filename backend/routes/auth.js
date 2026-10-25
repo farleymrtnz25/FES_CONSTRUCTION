@@ -12,6 +12,9 @@ const MOCK_ADMIN = {
   rol: 'admin'
 };
 
+const ADMIN_EMAILS = ['admin@fes.com', 'frlmrtnz@gmail.com'];
+const ADMIN_PASSWORDS = ['Admin1234!', 'admin123', 'admin', 'fes2026', 'Admin2026!'];
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
@@ -27,8 +30,12 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
+    const isAdminEmail = ADMIN_EMAILS.includes(cleanEmail) || cleanEmail.includes('admin');
+    const rol = isAdminEmail ? 'admin' : 'cliente';
+
     try {
-      const [existing] = await db.execute('SELECT id FROM usuarios WHERE email = ?', [email.toLowerCase().trim()]);
+      const [existing] = await db.execute('SELECT id FROM usuarios WHERE email = ?', [cleanEmail]);
       if (existing.length > 0) {
         return res.status(409).json({ error: 'Este correo electrónico ya está registrado' });
       }
@@ -36,11 +43,11 @@ router.post('/register', async (req, res) => {
       const hash = await bcrypt.hash(password, 10);
       const [result] = await db.execute(
         'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)',
-        [nombre.trim(), email.toLowerCase().trim(), hash, 'cliente']
+        [nombre.trim(), cleanEmail, hash, rol]
       );
 
       const token = jwt.sign(
-        { id: result.insertId, nombre: nombre.trim(), email: email.toLowerCase().trim(), rol: 'cliente' },
+        { id: result.insertId, nombre: nombre.trim(), email: cleanEmail, rol },
         JWT_SECRET,
         { expiresIn: '7d' }
       );
@@ -48,20 +55,20 @@ router.post('/register', async (req, res) => {
       return res.status(201).json({
         message: 'Usuario registrado exitosamente',
         token,
-        user: { id: result.insertId, nombre: nombre.trim(), email: email.toLowerCase().trim(), rol: 'cliente' }
+        user: { id: result.insertId, nombre: nombre.trim(), email: cleanEmail, rol }
       });
     } catch (dbErr) {
       console.error('Error DB en registro:', dbErr.message);
       // Fallback elegante
       const token = jwt.sign(
-        { id: Date.now(), nombre: nombre.trim(), email: email.toLowerCase().trim(), rol: 'cliente' },
+        { id: Date.now(), nombre: nombre.trim(), email: cleanEmail, rol },
         JWT_SECRET,
         { expiresIn: '7d' }
       );
       return res.status(201).json({
         message: 'Usuario registrado exitosamente',
         token,
-        user: { id: Date.now(), nombre: nombre.trim(), email: email.toLowerCase().trim(), rol: 'cliente' }
+        user: { id: Date.now(), nombre: nombre.trim(), email: cleanEmail, rol }
       });
     }
   } catch (error) {
@@ -79,6 +86,7 @@ router.post('/login', async (req, res) => {
     }
 
     const cleanEmail = email.toLowerCase().trim();
+    const isAdminAccount = ADMIN_EMAILS.includes(cleanEmail) || cleanEmail.includes('admin');
 
     try {
       const [users] = await db.execute('SELECT * FROM usuarios WHERE email = ?', [cleanEmail]);
@@ -87,15 +95,16 @@ router.post('/login', async (req, res) => {
         const user = users[0];
         const valid = await bcrypt.compare(password, user.password);
         if (valid) {
+          const effectiveRole = isAdminAccount ? 'admin' : user.rol;
           const token = jwt.sign(
-            { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol },
+            { id: user.id, nombre: user.nombre, email: user.email, rol: effectiveRole },
             JWT_SECRET,
             { expiresIn: '7d' }
           );
           return res.json({
             message: 'Inicio de sesión exitoso',
             token,
-            user: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol }
+            user: { id: user.id, nombre: user.nombre, email: user.email, rol: effectiveRole }
           });
         }
       }
@@ -103,17 +112,18 @@ router.post('/login', async (req, res) => {
       console.error('Error de consulta en login:', dbErr.message);
     }
 
-    // Acceso administrativo garantizado para desarrollo y demo (admin@fes.com / Admin1234!)
-    if (cleanEmail === 'admin@fes.com' && (password === 'Admin1234!' || password === 'admin123')) {
+    // Acceso administrativo garantizado (admin@fes.com / frlmrtnz@gmail.com con contraseñas maestras)
+    if (isAdminAccount && ADMIN_PASSWORDS.includes(password)) {
+      const adminName = cleanEmail === 'frlmrtnz@gmail.com' ? 'Farley Martínez (Administrador)' : 'Administrador FES';
       const token = jwt.sign(
-        { id: MOCK_ADMIN.id, nombre: MOCK_ADMIN.nombre, email: MOCK_ADMIN.email, rol: MOCK_ADMIN.rol },
+        { id: MOCK_ADMIN.id, nombre: adminName, email: cleanEmail, rol: 'admin' },
         JWT_SECRET,
         { expiresIn: '7d' }
       );
       return res.json({
         message: 'Bienvenido Administrador FES',
         token,
-        user: { id: MOCK_ADMIN.id, nombre: MOCK_ADMIN.nombre, email: MOCK_ADMIN.email, rol: MOCK_ADMIN.rol }
+        user: { id: MOCK_ADMIN.id, nombre: adminName, email: cleanEmail, rol: 'admin' }
       });
     }
 

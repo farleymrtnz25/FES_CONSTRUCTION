@@ -121,6 +121,15 @@ export const Footer = ({ onOpenLegal, onNavigate }) => {
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Certificación Web 20 de 20 • Protección SSL</span>
               </div>
+              <div className="pt-1">
+                <a
+                  href="#admin"
+                  onClick={(e) => goTab(e, 'admin')}
+                  className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-amber-400 transition-colors cursor-pointer"
+                >
+                  <span>🔐 Acceso Administrativo</span>
+                </a>
+              </div>
             </div>
           </div>
 

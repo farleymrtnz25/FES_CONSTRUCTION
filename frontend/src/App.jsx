@@ -37,7 +37,14 @@ function MainApp() {
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === '404') {
+      if (hash === 'admin') {
+        setIs404(false);
+        if (isAdmin) {
+          setAdminModalOpen(true);
+        } else {
+          setAuthModalOpen(true);
+        }
+      } else if (hash === '404') {
         setIs404(true);
       } else if (VALID_TABS.includes(hash)) {
         setIs404(false);
@@ -51,9 +58,17 @@ function MainApp() {
     handleHash();
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+  }, [isAdmin]);
 
   const handleSelectTab = (tabId) => {
+    if (tabId === 'admin') {
+      if (isAdmin) {
+        setAdminModalOpen(true);
+      } else {
+        setAuthModalOpen(true);
+      }
+      return;
+    }
     setIs404(false);
     setCurrentTab(tabId);
     window.location.hash = tabId;

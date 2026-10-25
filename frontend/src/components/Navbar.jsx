@@ -234,6 +234,18 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onVie
                 </button>
               );
             })}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  onOpenAdmin();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-left py-3 px-4 rounded-xl text-sm font-bold flex items-center gap-3 bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
+              >
+                <LayoutDashboard className="w-4 h-4 text-amber-400" />
+                <span>Panel de Administración Central</span>
+              </button>
+            )}
           </div>
         </div>
       )}

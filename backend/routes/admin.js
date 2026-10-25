@@ -149,7 +149,7 @@ router.patch('/productos/:id/precio', async (req, res) => {
 router.get('/pedidos', async (req, res) => {
   try {
     const [pedidos] = await db.execute(`
-      SELECT p.*, u.nombre AS cliente_nombre, u.email AS cliente_email
+      SELECT p.*, u.nombre AS user_nombre, u.email AS cliente_email
       FROM pedidos p
       LEFT JOIN usuarios u ON p.usuario_id = u.id
       ORDER BY p.creado_en DESC
@@ -157,6 +157,24 @@ router.get('/pedidos', async (req, res) => {
     for (const p of pedidos) {
       const [det] = await db.execute('SELECT * FROM detalle_pedido WHERE pedido_id = ?', [p.id]);
       p.detalle = det;
+
+      // Extraer datos legibles de contacto si vienen dentro del campo notas
+      if (!p.cliente_nombre) {
+        if (p.user_nombre) {
+          p.cliente_nombre = p.user_nombre;
+        } else if (p.notas && p.notas.includes('Cliente: ')) {
+          const match = p.notas.match(/Cliente:\s*([^|]+)/);
+          if (match) p.cliente_nombre = match[1].trim();
+        }
+      }
+      if (!p.telefono && p.notas && p.notas.includes('Tel: ')) {
+        const match = p.notas.match(/Tel:\s*([^|]+)/);
+        if (match) p.telefono = match[1].trim();
+      }
+      if (!p.direccion_envio && p.notas && p.notas.includes('Dir: ')) {
+        const match = p.notas.match(/Dir:\s*([^|]+)/);
+        if (match) p.direccion_envio = match[1].trim();
+      }
     }
     res.json(pedidos);
   } catch (error) {
