@@ -623,7 +623,7 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
               </div>
 
               {/* Products Table */}
-              <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
+              <div className="glass-panel rounded-xl overflow-x-auto border border-slate-800">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
                     <tr>
@@ -848,7 +848,7 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                 </span>
               </div>
 
-              <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
+              <div className="glass-panel rounded-xl overflow-x-auto border border-slate-800">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
                     <tr>
@@ -1253,7 +1253,7 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                 </span>
               </div>
 
-              <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
+              <div className="glass-panel rounded-xl overflow-x-auto border border-slate-800">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
                     <tr>
