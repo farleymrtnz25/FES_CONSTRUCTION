@@ -118,12 +118,12 @@ router.post('/', async (req, res) => {
     for (const item of productos) {
       const cantidad = Number(item.cantidad) || 1;
       const precioUnit = Number(item.precio) || 0;
-      const subtotal = cantidad * precioUnit;
+      const subtotalItem = cantidad * precioUnit;
 
       await connection.execute(
         `INSERT INTO detalle_pedido (pedido_id, producto_id, nombre_producto, cantidad, precio_unitario, subtotal)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [pedidoId, item.id || null, item.nombre, cantidad, precioUnit, subtotal]
+        [pedidoId, item.id || null, item.nombre, cantidad, precioUnit, subtotalItem]
       );
 
       // Descontar inventario si el producto existe
@@ -146,7 +146,7 @@ router.post('/', async (req, res) => {
       success: true,
       message: 'Pedido registrado con éxito',
       pedidoId,
-      total
+      total: totalNum
     });
   } catch (error) {
     await connection.rollback();
@@ -174,6 +174,23 @@ router.get('/mis-pedidos', async (req, res) => {
     for (const p of pedidos) {
       const [det] = await db.execute('SELECT * FROM detalle_pedido WHERE pedido_id = ?', [p.id]);
       p.detalle = det;
+
+      if (!p.cliente_nombre) {
+        if (p.notas && p.notas.includes('Cliente: ')) {
+          const match = p.notas.match(/Cliente:\s*([^|]+)/);
+          if (match) p.cliente_nombre = match[1].trim();
+        } else {
+          p.cliente_nombre = decoded.nombre || 'Cliente FES';
+        }
+      }
+      if (!p.telefono && p.notas && p.notas.includes('Tel: ')) {
+        const match = p.notas.match(/Tel:\s*([^|]+)/);
+        if (match) p.telefono = match[1].trim();
+      }
+      if (!p.direccion_envio && p.notas && p.notas.includes('Dir: ')) {
+        const match = p.notas.match(/Dir:\s*([^|]+)/);
+        if (match) p.direccion_envio = match[1].trim();
+      }
     }
 
     res.json(pedidos);

@@ -17,7 +17,9 @@ import {
   PhoneCall,
   ShieldCheck,
   Mail,
-  Phone
+  Phone,
+  FileText,
+  CheckCircle2
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -29,7 +31,7 @@ const NAV_ITEMS = [
   { id: 'contacto', label: 'Contacto y Despachos', icon: PhoneCall },
 ];
 
-export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onViewOrders }) => {
+export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onOpenProfile, onOpenCheckout }) => {
   const { cartCount, cartTotal, setIsCartOpen } = useCart();
   const { user, isAdmin, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -98,21 +100,12 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onVie
         </button>
 
         {/* Acciones Derecha */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* CTA Principal Único (Requisito 20) */}
-          <button 
-            onClick={() => handleTabClick('cotizador')} 
-            className="hidden md:inline-flex btn-primary-cta text-xs sm:text-sm py-2.5 px-4"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Cotizar Obra con IA</span>
-          </button>
-
+        <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Botón Carrito con Total */}
           <button
             onClick={() => setIsCartOpen(true)}
             aria-label="Abrir carrito de compras"
-            className="relative flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white transition-all cursor-pointer"
+            className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white transition-all cursor-pointer"
           >
             <div className="relative">
               <ShoppingCart className="w-5 h-5 text-orange-400" />
@@ -123,20 +116,42 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onVie
               )}
             </div>
             <div className="hidden sm:block text-left leading-tight">
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">Tu Pedido</span>
+              <span className="text-[10px] text-slate-400 block uppercase font-bold">Tu Carrito</span>
               <span className="text-xs font-mono font-extrabold text-white">
                 ${cartTotal.toLocaleString('es-CO')}
               </span>
             </div>
           </button>
 
+          {/* Botón Directo: Finalizar Pedido de Materiales */}
+          <button
+            onClick={onOpenCheckout}
+            title="Finalizar Pedido de Materiales y Descargar Recibo PDF"
+            className="hidden md:inline-flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white shadow-md transition-all cursor-pointer"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Finalizar Pedido</span>
+          </button>
+
+          {/* Botón Directo: Mi Perfil y Recibos PDF */}
+          <button
+            onClick={onOpenProfile}
+            title="Ver Mi Perfil y Descargar Recibos de Compra"
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-2.5 rounded-xl transition-all cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-orange-400" />
+            <span className="hidden sm:inline truncate max-w-[120px]">
+              {user ? `Perfil (${user.nombre.split(' ')[0]})` : 'Perfil y Recibos'}
+            </span>
+          </button>
+
           {/* Usuario / Admin */}
           {user ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {isAdmin && (
                 <button
                   onClick={onOpenAdmin}
-                  className={`flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 text-xs font-extrabold px-3 py-2.5 rounded-xl border transition-all cursor-pointer ${
                     currentTab === 'admin'
                       ? 'bg-amber-500 text-slate-950 border-amber-400'
                       : 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
@@ -144,16 +159,9 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onVie
                   title="Abrir Panel de Administración"
                 >
                   <LayoutDashboard className="w-4 h-4" />
-                  <span className="hidden sm:inline">Panel Admin</span>
+                  <span className="hidden lg:inline">Panel Admin</span>
                 </button>
               )}
-              <button
-                onClick={onViewOrders}
-                className="hidden sm:flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-2.5 rounded-xl transition-all cursor-pointer"
-              >
-                <User className="w-4 h-4 text-orange-400" />
-                <span className="truncate max-w-[110px]">{user.nombre.split(' ')[0]}</span>
-              </button>
               <button
                 onClick={logout}
                 className="p-2.5 rounded-xl bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
@@ -165,7 +173,7 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onVie
           ) : (
             <button
               onClick={onOpenAuth}
-              className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
+              className="flex items-center gap-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-2.5 rounded-xl transition-all cursor-pointer"
             >
               <User className="w-4 h-4 text-orange-400" />
               <span>Ingresar</span>
@@ -201,6 +209,20 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onVie
                 </button>
               );
             })}
+            <button
+              onClick={onOpenCheckout}
+              className="fes-tab-btn text-orange-300 hover:text-white"
+            >
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-orange-400" />
+              <span>Finalizar Pedido</span>
+            </button>
+            <button
+              onClick={onOpenProfile}
+              className="fes-tab-btn text-slate-200 hover:text-white"
+            >
+              <FileText className="w-4 h-4 shrink-0 text-orange-400" />
+              <span>Mi Perfil y Recibos</span>
+            </button>
             {isAdmin && (
               <button
                 onClick={onOpenAdmin}
@@ -234,6 +256,29 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onVie
                 </button>
               );
             })}
+
+            <button
+              onClick={() => {
+                onOpenCheckout();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full text-left py-3 px-4 rounded-xl text-sm font-bold flex items-center gap-3 bg-orange-600/20 text-orange-300 border border-orange-500/40"
+            >
+              <CheckCircle2 className="w-4 h-4 text-orange-400" />
+              <span>Finalizar Pedido de Materiales</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onOpenProfile();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full text-left py-3 px-4 rounded-xl text-sm font-bold flex items-center gap-3 bg-slate-800 text-slate-200 border border-slate-700"
+            >
+              <FileText className="w-4 h-4 text-orange-400" />
+              <span>Mi Perfil y Descargar Recibos PDF</span>
+            </button>
+
             {isAdmin && (
               <button
                 onClick={() => {

@@ -63,13 +63,39 @@ export const ProductsPage = ({ onAskAIAboutProduct, initialCategory = 'Todos' })
     }
   };
 
+  // Permite escribir libremente con el teclado (incluso borrar el número temporalmente para escribir otro)
   const handleQuantityChange = (id, val) => {
-    const q = Math.max(1, parseInt(val) || 1);
+    if (val === '') {
+      setQuantities((prev) => ({ ...prev, [id]: '' }));
+      return;
+    }
+    const clean = String(val).replace(/[^\d]/g, '');
+    if (clean === '') {
+      setQuantities((prev) => ({ ...prev, [id]: '' }));
+      return;
+    }
+    const q = Math.max(1, parseInt(clean, 10));
     setQuantities((prev) => ({ ...prev, [id]: q }));
   };
 
+  const handleQuantityBlur = (id, maxStock) => {
+    setQuantities((prev) => {
+      const current = prev[id];
+      const parsed = parseInt(current, 10);
+      if (isNaN(parsed) || parsed < 1) {
+        return { ...prev, [id]: 1 };
+      }
+      if (maxStock && parsed > maxStock) {
+        return { ...prev, [id]: maxStock };
+      }
+      return { ...prev, [id]: parsed };
+    });
+  };
+
   const handleAdd = (product) => {
-    const qty = quantities[product.id] || 1;
+    const rawQty = quantities[product.id];
+    const qty = Math.max(1, parseInt(rawQty, 10) || 1);
+    setQuantities((prev) => ({ ...prev, [product.id]: qty }));
     addToCart(product, qty);
     setAddedAnimation((prev) => ({ ...prev, [product.id]: true }));
     setTimeout(() => {
@@ -187,7 +213,8 @@ export const ProductsPage = ({ onAskAIAboutProduct, initialCategory = 'Todos' })
       ) : (
         <div className="fes-product-grid">
           {filteredProducts.map((p) => {
-            const qty = quantities[p.id] || 1;
+            const qty = quantities[p.id] !== undefined ? quantities[p.id] : 1;
+            const numQty = Math.max(1, parseInt(qty, 10) || 1);
             const isAdded = addedAnimation[p.id];
             const hasStock = p.stock > 0;
 
@@ -279,31 +306,46 @@ export const ProductsPage = ({ onAskAIAboutProduct, initialCategory = 'Todos' })
                       </button>
                     </div>
 
-                    {/* Selector de Cantidad + Botón Agregar al Carrito */}
+                    {/* Selector de Cantidad Editable por Teclado + Botón Agregar al Carrito */}
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center border-2 border-slate-200 rounded-xl bg-slate-50 overflow-hidden">
+                      <div className="flex items-center border-2 border-slate-200 focus-within:border-orange-500 rounded-xl bg-slate-50 overflow-hidden transition-colors">
                         <button
                           type="button"
-                          onClick={() => handleQuantityChange(p.id, qty - 10 >= 1 ? qty - 10 : 1)}
+                          onClick={() => handleQuantityChange(p.id, numQty - 1 >= 1 ? numQty - 1 : 1)}
                           className="px-2.5 py-2 text-slate-600 hover:bg-slate-200 font-bold text-xs cursor-pointer"
-                          title="Restar"
+                          title="Restar 1"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
                         <input
-                          type="number"
-                          min="1"
-                          max={hasStock ? p.stock : 50000}
+                          type="text"
+                          inputMode="numeric"
                           value={qty}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => handleQuantityChange(p.id, e.target.value)}
-                          className="w-16 text-center bg-white py-2 text-sm font-extrabold text-slate-900 focus:outline-none font-mono"
-                          aria-label="Cantidad"
+                          onBlur={() => handleQuantityBlur(p.id, hasStock ? p.stock : 50000)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              handleQuantityChange(p.id, numQty + 1);
+                            } else if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              handleQuantityChange(p.id, Math.max(1, numQty - 1));
+                            } else if (e.key === 'Enter' && hasStock) {
+                              e.preventDefault();
+                              handleAdd(p);
+                            }
+                          }}
+                          placeholder="Cant."
+                          className="w-20 text-center bg-white py-2 px-1 text-sm font-extrabold text-slate-900 focus:outline-none focus:bg-orange-50/40 font-mono"
+                          aria-label="Escribe la cantidad desde el teclado"
+                          title="Escribe cualquier cantidad con el teclado"
                         />
                         <button
                           type="button"
-                          onClick={() => handleQuantityChange(p.id, qty + 50)}
+                          onClick={() => handleQuantityChange(p.id, numQty + 1)}
                           className="px-2.5 py-2 text-slate-600 hover:bg-slate-200 font-bold text-xs cursor-pointer"
-                          title="Sumar +50"
+                          title="Sumar 1"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>

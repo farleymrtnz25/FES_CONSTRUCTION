@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import {
+  generateInvoicePDF,
+  exportOrdersReportPDF,
+  exportSalesReportPDF,
+  exportInventoryMovementsPDF,
+  exportToCSV
+} from '../utils/invoiceGenerator';
 import { 
   X, 
   Package, 
@@ -7,16 +14,13 @@ import {
   Clock, 
   Plus, 
   Edit, 
-  Trash2, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  DollarSign, 
   ShoppingBag, 
   Calendar, 
   CheckCircle, 
-  AlertCircle,
   RefreshCw,
-  Search
+  Download,
+  FileText,
+  Filter
 } from 'lucide-react';
 
 const TABS = [
@@ -25,6 +29,38 @@ const TABS = [
   { id: 'reportes', label: 'Reportes de Ventas', icon: TrendingUp },
   { id: 'movimientos', label: 'Historial de Entradas/Salidas', icon: Clock }
 ];
+
+const MESES_NOMBRES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
+function extractDateParts(rawDate) {
+  const d = rawDate ? new Date(rawDate) : new Date();
+  if (isNaN(d.getTime())) {
+    const now = new Date();
+    const y = String(now.getFullYear());
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return { year: y, month: `${y}-${m}`, day: `${y}-${m}-${day}`, dateObj: now };
+  }
+  const y = String(d.getFullYear());
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return {
+    year: y,
+    month: `${y}-${m}`,
+    day: `${y}-${m}-${day}`,
+    dateObj: d
+  };
+}
+
+function formatMonthLabel(yyyyMm) {
+  if (!yyyyMm || !yyyyMm.includes('-')) return yyyyMm;
+  const [y, m] = yyyyMm.split('-');
+  const idx = parseInt(m, 10) - 1;
+  return `${MESES_NOMBRES[idx] || m} ${y}`;
+}
 
 export const AdminDashboard = ({ isOpen, onClose }) => {
   const { token, isAdmin } = useAuth();
@@ -35,6 +71,19 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  // Categorization / Period Filter States for the 3 Admin Sections
+  // mode: 'todos' | 'dia' | 'mes' | 'anio'
+  const [ordersFilterMode, setOrdersFilterMode] = useState('todos');
+  const [ordersSelectedPeriod, setOrdersSelectedPeriod] = useState('');
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState('Todos');
+
+  const [salesPeriodMode, setSalesPeriodMode] = useState('dia'); // 'dia' | 'mes' | 'anio'
+  const [salesFilterValue, setSalesFilterValue] = useState('');
+
+  const [movFilterMode, setMovFilterMode] = useState('todos'); // 'todos' | 'dia' | 'mes' | 'anio'
+  const [movSelectedPeriod, setMovSelectedPeriod] = useState('');
+  const [movTypeFilter, setMovTypeFilter] = useState('Todos'); // 'Todos' | 'entrada' | 'salida'
 
   // Modals inside admin
   const [stockModal, setStockModal] = useState({ open: false, product: null, tipo: 'entrada', cantidad: '', nota: '' });
@@ -57,7 +106,7 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
 
   const showNotify = (msg) => {
     setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
+    setTimeout(() => setNotification(null), 3500);
   };
 
   const loadData = async () => {
@@ -68,25 +117,309 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
       if (activeTab === 'productos') {
         const res = await fetch('/api/admin/productos', { headers });
         const data = await res.json();
-        setProducts(data);
+        setProducts(Array.isArray(data) ? data : []);
       } else if (activeTab === 'pedidos') {
         const res = await fetch('/api/admin/pedidos', { headers });
         const data = await res.json();
-        setOrders(data);
+        setOrders(Array.isArray(data) ? data : []);
       } else if (activeTab === 'reportes') {
-        const res = await fetch('/api/admin/reportes/ventas', { headers });
-        const data = await res.json();
-        setReports(data);
+        const [resRep, resOrd] = await Promise.all([
+          fetch('/api/admin/reportes/ventas', { headers }),
+          fetch('/api/admin/pedidos', { headers })
+        ]);
+        const dataRep = await resRep.json();
+        const dataOrd = await resOrd.json();
+        setReports(dataRep || {});
+        setOrders(Array.isArray(dataOrd) ? dataOrd : []);
       } else if (activeTab === 'movimientos') {
         const res = await fetch('/api/admin/reportes/inventario', { headers });
         const data = await res.json();
-        setMovements(data.movimientos || []);
+        setMovements(Array.isArray(data?.movimientos) ? data.movimientos : []);
       }
     } catch (err) {
       console.error('Error cargando datos de admin:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  // ============================================================================
+  // 1. GESTIÓN DE PEDIDOS: Categorización por Día, Mes y Año
+  // ============================================================================
+  const ordersCategorized = useMemo(() => {
+    const byDay = {};
+    const byMonth = {};
+    const byYear = {};
+
+    orders.forEach((o) => {
+      const { day, month, year } = extractDateParts(o.creado_en);
+      const val = Number(o.total || 0);
+
+      if (!byDay[day]) byDay[day] = { period: day, label: day, count: 0, total: 0, items: [] };
+      byDay[day].count += 1;
+      byDay[day].total += val;
+      byDay[day].items.push(o);
+
+      if (!byMonth[month]) byMonth[month] = { period: month, label: formatMonthLabel(month), count: 0, total: 0, items: [] };
+      byMonth[month].count += 1;
+      byMonth[month].total += val;
+      byMonth[month].items.push(o);
+
+      if (!byYear[year]) byYear[year] = { period: year, label: `Año ${year}`, count: 0, total: 0, items: [] };
+      byYear[year].count += 1;
+      byYear[year].total += val;
+      byYear[year].items.push(o);
+    });
+
+    return {
+      dia: Object.values(byDay).sort((a, b) => b.period.localeCompare(a.period)),
+      mes: Object.values(byMonth).sort((a, b) => b.period.localeCompare(a.period)),
+      anio: Object.values(byYear).sort((a, b) => b.period.localeCompare(a.period))
+    };
+  }, [orders]);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      if (ordersStatusFilter !== 'Todos' && o.estado !== ordersStatusFilter) return false;
+      if (ordersFilterMode === 'todos' || !ordersSelectedPeriod) return true;
+      const { day, month, year } = extractDateParts(o.creado_en);
+      if (ordersFilterMode === 'dia') return day === ordersSelectedPeriod;
+      if (ordersFilterMode === 'mes') return month === ordersSelectedPeriod;
+      if (ordersFilterMode === 'anio') return year === ordersSelectedPeriod;
+      return true;
+    });
+  }, [orders, ordersFilterMode, ordersSelectedPeriod, ordersStatusFilter]);
+
+  const getOrdersFilterLabel = () => {
+    let base = 'Todos los periodos';
+    if (ordersFilterMode === 'dia') base = ordersSelectedPeriod ? `Día: ${ordersSelectedPeriod}` : 'Categorizado por Día';
+    if (ordersFilterMode === 'mes') base = ordersSelectedPeriod ? `Mes: ${formatMonthLabel(ordersSelectedPeriod)}` : 'Categorizado por Mes';
+    if (ordersFilterMode === 'anio') base = ordersSelectedPeriod ? `Año: ${ordersSelectedPeriod}` : 'Categorizado por Año';
+    if (ordersStatusFilter !== 'Todos') base += ` (${ordersStatusFilter})`;
+    return base;
+  };
+
+  // ============================================================================
+  // 2. REPORTES DE VENTAS: Categorización por Día, Mes y Año
+  // ============================================================================
+  const salesBreakdowns = useMemo(() => {
+    const validOrders = orders.filter((o) => o.estado !== 'Cancelado');
+    const dayMap = {};
+    const monthMap = {};
+    const yearMap = {};
+
+    validOrders.forEach((o) => {
+      const { day, month, year } = extractDateParts(o.creado_en);
+      const val = Number(o.total || 0);
+
+      if (!dayMap[day]) dayMap[day] = { periodo: day, label: day, total_pedidos: 0, ingresos: 0 };
+      dayMap[day].total_pedidos += 1;
+      dayMap[day].ingresos += val;
+
+      if (!monthMap[month]) monthMap[month] = { periodo: month, label: formatMonthLabel(month), total_pedidos: 0, ingresos: 0 };
+      monthMap[month].total_pedidos += 1;
+      monthMap[month].ingresos += val;
+
+      if (!yearMap[year]) yearMap[year] = { periodo: year, label: `Año ${year}`, total_pedidos: 0, ingresos: 0 };
+      yearMap[year].total_pedidos += 1;
+      yearMap[year].ingresos += val;
+    });
+
+    // Fallback to backend reports if orders list is empty
+    if (Object.keys(dayMap).length === 0 && reports) {
+      (reports.porDia || []).forEach((d) => {
+        const key = typeof d.fecha === 'string' ? d.fecha.slice(0, 10) : extractDateParts(d.fecha).day;
+        dayMap[key] = { periodo: key, label: key, total_pedidos: Number(d.total_pedidos || 0), ingresos: Number(d.ingresos || 0) };
+      });
+      (reports.porMes || []).forEach((m) => {
+        const key = m.periodo || `${m.anio}-${String(m.mes).padStart(2, '0')}`;
+        monthMap[key] = { periodo: key, label: formatMonthLabel(key), total_pedidos: Number(m.total_pedidos || 0), ingresos: Number(m.ingresos || 0) };
+      });
+      (reports.porAnio || []).forEach((a) => {
+        const key = String(a.anio);
+        yearMap[key] = { periodo: key, label: `Año ${key}`, total_pedidos: Number(a.total_pedidos || 0), ingresos: Number(a.ingresos || 0) };
+      });
+    }
+
+    return {
+      dia: Object.values(dayMap).sort((a, b) => b.periodo.localeCompare(a.periodo)),
+      mes: Object.values(monthMap).sort((a, b) => b.periodo.localeCompare(a.periodo)),
+      anio: Object.values(yearMap).sort((a, b) => b.periodo.localeCompare(a.periodo))
+    };
+  }, [orders, reports]);
+
+  const currentSalesRows = useMemo(() => {
+    const list = salesBreakdowns[salesPeriodMode] || [];
+    if (!salesFilterValue) return list;
+    return list.filter((r) => r.periodo === salesFilterValue);
+  }, [salesBreakdowns, salesPeriodMode, salesFilterValue]);
+
+  // ============================================================================
+  // 3. HISTORIAL DE ENTRADAS / SALIDAS: Categorización por Día, Mes y Año
+  // ============================================================================
+  const movementsCategorized = useMemo(() => {
+    const byDay = {};
+    const byMonth = {};
+    const byYear = {};
+
+    movements.forEach((m) => {
+      const { day, month, year } = extractDateParts(m.fecha);
+      const cant = Number(m.cantidad || 0);
+      const isEntrada = m.tipo === 'entrada';
+
+      if (!byDay[day]) byDay[day] = { period: day, label: day, count: 0, entradas: 0, salidas: 0 };
+      byDay[day].count += 1;
+      if (isEntrada) byDay[day].entradas += cant;
+      else byDay[day].salidas += cant;
+
+      if (!byMonth[month]) byMonth[month] = { period: month, label: formatMonthLabel(month), count: 0, entradas: 0, salidas: 0 };
+      byMonth[month].count += 1;
+      if (isEntrada) byMonth[month].entradas += cant;
+      else byMonth[month].salidas += cant;
+
+      if (!byYear[year]) byYear[year] = { period: year, label: `Año ${year}`, count: 0, entradas: 0, salidas: 0 };
+      byYear[year].count += 1;
+      if (isEntrada) byYear[year].entradas += cant;
+      else byYear[year].salidas += cant;
+    });
+
+    return {
+      dia: Object.values(byDay).sort((a, b) => b.period.localeCompare(a.period)),
+      mes: Object.values(byMonth).sort((a, b) => b.period.localeCompare(a.period)),
+      anio: Object.values(byYear).sort((a, b) => b.period.localeCompare(a.period))
+    };
+  }, [movements]);
+
+  const filteredMovements = useMemo(() => {
+    return movements.filter((m) => {
+      if (movTypeFilter !== 'Todos' && m.tipo !== movTypeFilter) return false;
+      if (movFilterMode === 'todos' || !movSelectedPeriod) return true;
+      const { day, month, year } = extractDateParts(m.fecha);
+      if (movFilterMode === 'dia') return day === movSelectedPeriod;
+      if (movFilterMode === 'mes') return month === movSelectedPeriod;
+      if (movFilterMode === 'anio') return year === movSelectedPeriod;
+      return true;
+    });
+  }, [movements, movFilterMode, movSelectedPeriod, movTypeFilter]);
+
+  const getMovementsFilterLabel = () => {
+    let base = 'Todos los periodos';
+    if (movFilterMode === 'dia') base = movSelectedPeriod ? `Día: ${movSelectedPeriod}` : 'Categorizado por Día';
+    if (movFilterMode === 'mes') base = movSelectedPeriod ? `Mes: ${formatMonthLabel(movSelectedPeriod)}` : 'Categorizado por Mes';
+    if (movFilterMode === 'anio') base = movSelectedPeriod ? `Año: ${movSelectedPeriod}` : 'Categorizado por Año';
+    if (movTypeFilter !== 'Todos') base += ` (${movTypeFilter.toUpperCase()})`;
+    return base;
+  };
+
+  // ============================================================================
+  // HANDLERS DE DESCARGA (PDF & CSV)
+  // ============================================================================
+  const handleDownloadSingleOrderReceipt = (order) => {
+    generateInvoicePDF({
+      pedidoId: order.id,
+      fecha: order.creado_en,
+      cliente: {
+        nombre: order.cliente_nombre || 'Cliente F.E.S.',
+        telefono: order.telefono || 'No especificado',
+        direccion: order.direccion_envio || 'Recogida en planta / Acordado',
+        notas: order.notas || ''
+      },
+      items: (order.detalle || []).map((d) => ({
+        nombre: d.nombre_producto || d.nombre,
+        medidas: d.medidas || 'Estándar',
+        cantidad: Number(d.cantidad),
+        precio: Number(d.precio_unitario || d.precio || 0)
+      })),
+      total: Number(order.total || 0),
+      metodoPago: order.metodo_pago || 'Acordado'
+    });
+    showNotify(`Recibo del Pedido #${order.id} descargado en PDF.`);
+  };
+
+  const handleDownloadOrdersPDF = () => {
+    exportOrdersReportPDF({
+      orders: filteredOrders,
+      filterLabel: getOrdersFilterLabel()
+    });
+    showNotify('Reporte de Gestión de Pedidos descargado en PDF.');
+  };
+
+  const handleDownloadOrdersCSV = () => {
+    const rows = filteredOrders.map((o) => {
+      const { day, month, year } = extractDateParts(o.creado_en);
+      return {
+        ID_Pedido: o.id,
+        Fecha_Hora: new Date(o.creado_en).toLocaleString('es-CO'),
+        Dia: day,
+        Mes: month,
+        Anio: year,
+        Cliente: o.cliente_nombre || 'Cliente Obra',
+        Telefono: o.telefono || '',
+        Direccion_Entrega: o.direccion_envio || '',
+        Materiales: (o.detalle || []).map((d) => `${d.cantidad}x ${d.nombre_producto}`).join('; '),
+        Total_COP: Number(o.total || 0),
+        Estado: o.estado || 'Pendiente'
+      };
+    });
+    exportToCSV(`FES_Gestion_Pedidos_${ordersFilterMode}`, rows);
+    showNotify('Registro de pedidos exportado a Excel (CSV).');
+  };
+
+  const handleDownloadSalesPDF = () => {
+    const modeTitle = salesPeriodMode === 'dia' ? 'Categorizado por Día' : salesPeriodMode === 'mes' ? 'Categorizado por Mes' : 'Categorizado por Año';
+    const totalPedidosPeriodo = currentSalesRows.reduce((acc, r) => acc + Number(r.total_pedidos || 0), 0);
+    const ingresosPeriodo = currentSalesRows.reduce((acc, r) => acc + Number(r.ingresos || 0), 0);
+
+    exportSalesReportPDF({
+      periodMode: salesPeriodMode,
+      periodLabel: salesFilterValue ? `${modeTitle} (${salesFilterValue})` : modeTitle,
+      summary: {
+        ingresos_totales: ingresosPeriodo || reports?.totalGeneral?.ingresos_totales || 0,
+        total_pedidos: totalPedidosPeriodo || reports?.totalGeneral?.total_pedidos || 0
+      },
+      rows: currentSalesRows,
+      topProductos: reports?.topProductos || []
+    });
+    showNotify('Reporte de Ventas descargado en PDF.');
+  };
+
+  const handleDownloadSalesCSV = () => {
+    const rows = currentSalesRows.map((r) => ({
+      Categoria_Temporal: salesPeriodMode.toUpperCase(),
+      Periodo: r.label || r.periodo,
+      Ordenes_Facturadas: Number(r.total_pedidos || 0),
+      Ingresos_Totales_COP: Number(r.ingresos || 0),
+      Ticket_Promedio_COP: r.total_pedidos > 0 ? Math.round(r.ingresos / r.total_pedidos) : 0
+    }));
+    exportToCSV(`FES_Reporte_Ventas_Por_${salesPeriodMode}`, rows);
+    showNotify('Reporte de Ventas exportado a Excel (CSV).');
+  };
+
+  const handleDownloadMovementsPDF = () => {
+    exportInventoryMovementsPDF({
+      movements: filteredMovements,
+      filterLabel: getMovementsFilterLabel()
+    });
+    showNotify('Historial de Entradas y Salidas descargado en PDF.');
+  };
+
+  const handleDownloadMovementsCSV = () => {
+    const rows = filteredMovements.map((m) => {
+      const { day, month, year } = extractDateParts(m.fecha);
+      return {
+        ID_Movimiento: m.id,
+        Fecha_Hora: new Date(m.fecha).toLocaleString('es-CO'),
+        Dia: day,
+        Mes: month,
+        Anio: year,
+        Tipo_Movimiento: (m.tipo || '').toUpperCase(),
+        Material: m.nombre_producto || '',
+        Cantidad_Unidades: Number(m.cantidad || 0),
+        Nota_Control: m.nota || ''
+      };
+    });
+    exportToCSV(`FES_Historial_Inventario_${movFilterMode}`, rows);
+    showNotify('Historial de Entradas/Salidas exportado a Excel (CSV).');
   };
 
   // Stock Adjustment
@@ -204,7 +537,7 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                 Panel de Administración Central — FES Construcción
               </h2>
               <p className="text-xs text-slate-400">
-                Control de inventario de patio, auditoría de ventas y despachos en tiempo real
+                Control de inventario, gestión de pedidos, reportes categorizados (Día/Mes/Año) y descarga de registros
               </p>
             </div>
           </div>
@@ -212,14 +545,14 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={loadData}
-              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
               title="Refrescar datos"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -259,7 +592,9 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6">
           
-          {/* TAB 1: PRODUCTOS */}
+          {/* ============================================================== */}
+          {/* TAB 1: PRODUCTOS                                               */}
+          {/* ============================================================== */}
           {activeTab === 'productos' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -348,7 +683,7 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                                 nota: 'Ingreso directo desde horno'
                               });
                             }}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-orange-600 text-slate-200 hover:text-white font-semibold transition-colors"
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-orange-600 text-slate-200 hover:text-white font-semibold transition-colors cursor-pointer"
                           >
                             Ajustar Stock
                           </button>
@@ -365,7 +700,7 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                               });
                               setProductModal({ open: true, product: p, isEdit: true });
                             }}
-                            className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                            className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 cursor-pointer"
                             title="Editar referencia"
                           >
                             <Edit className="w-4 h-4" />
@@ -379,11 +714,138 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* TAB 2: PEDIDOS */}
+          {/* ============================================================== */}
+          {/* TAB 2: GESTIÓN DE PEDIDOS (CATEGORIZADO DÍA / MES / AÑO)       */}
+          {/* ============================================================== */}
           {activeTab === 'pedidos' && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* Barra de categorización y descarga */}
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 mr-1">
+                    <Calendar className="w-4 h-4 text-orange-400" />
+                    Ver por:
+                  </span>
+                  {[
+                    { id: 'todos', label: 'Todos' },
+                    { id: 'dia', label: 'Por Día' },
+                    { id: 'mes', label: 'Por Mes' },
+                    { id: 'anio', label: 'Por Año' }
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setOrdersFilterMode(m.id);
+                        setOrdersSelectedPeriod('');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        ordersFilterMode === m.id
+                          ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+
+                  {/* Selector de periodo específico según modo */}
+                  {ordersFilterMode !== 'todos' && (
+                    <select
+                      value={ordersSelectedPeriod}
+                      onChange={(e) => setOrdersSelectedPeriod(e.target.value)}
+                      className="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-lg px-3 py-1.5 focus:border-orange-500"
+                    >
+                      <option value="">
+                        -- Todos los {ordersFilterMode === 'dia' ? 'días' : ordersFilterMode === 'mes' ? 'meses' : 'años'} --
+                      </option>
+                      {(ordersCategorized[ordersFilterMode] || []).map((g) => (
+                        <option key={g.period} value={g.period}>
+                          {g.label} ({g.count} ped. — ${g.total.toLocaleString('es-CO')})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Filtro de Estado */}
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      value={ordersStatusFilter}
+                      onChange={(e) => setOrdersStatusFilter(e.target.value)}
+                      className="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-lg px-2.5 py-1.5 focus:border-orange-500"
+                    >
+                      <option value="Todos">Todos los estados</option>
+                      <option value="Pendiente">Pendiente</option>
+                      <option value="Confirmado">Confirmado</option>
+                      <option value="En preparación">En preparación</option>
+                      <option value="En camino">En camino</option>
+                      <option value="Entregado">Entregado</option>
+                      <option value="Cancelado">Cancelado</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Botones de Descarga */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadOrdersPDF}
+                    className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-orange-600/20 transition-all cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Descargar PDF</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadOrdersCSV}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Exportar Excel (CSV)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tarjetas de resumen categorizadas (cuando se elige Por Día, Por Mes o Por Año) */}
+              {ordersFilterMode !== 'todos' && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-orange-400">
+                    Resumen de Pedidos Agrupados por {ordersFilterMode === 'dia' ? 'Día' : ordersFilterMode === 'mes' ? 'Mes' : 'Año'} (Haz clic en una tarjeta para filtrar)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {(ordersCategorized[ordersFilterMode] || []).map((grp) => {
+                      const isSelected = ordersSelectedPeriod === grp.period;
+                      return (
+                        <button
+                          key={grp.period}
+                          onClick={() => setOrdersSelectedPeriod(isSelected ? '' : grp.period)}
+                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-orange-600/20 border-orange-500 shadow-lg'
+                              : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold text-white">{grp.label}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-orange-400">
+                              {grp.count} {grp.count === 1 ? 'pedido' : 'pedidos'}
+                            </span>
+                          </div>
+                          <div className="mt-2 font-mono font-black text-sm text-emerald-400">
+                            ${grp.total.toLocaleString('es-CO')} COP
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-between items-center text-xs text-slate-400">
-                <span>Historial de órdenes recibidas: <strong className="text-white">{orders.length}</strong></span>
+                <span>
+                  Mostrando <strong className="text-white">{filteredOrders.length}</strong> de <strong className="text-white">{orders.length}</strong> órdenes ({getOrdersFilterLabel()})
+                </span>
+                <span className="font-mono text-slate-300">
+                  Suma en vista: <strong className="text-orange-400">${filteredOrders.reduce((acc, o) => acc + Number(o.total || 0), 0).toLocaleString('es-CO')} COP</strong>
+                </span>
               </div>
 
               <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
@@ -391,62 +853,148 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                   <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
                     <tr>
                       <th className="p-3.5"># Orden</th>
-                      <th className="p-3.5">Cliente</th>
-                      <th className="p-3.5">Fecha</th>
+                      <th className="p-3.5">Cliente / Obra</th>
+                      <th className="p-3.5">Fecha (Día / Mes / Año)</th>
                       <th className="p-3.5">Materiales Solicitados</th>
                       <th className="p-3.5">Total (COP)</th>
                       <th className="p-3.5">Estado del Despacho</th>
+                      <th className="p-3.5 text-right">Recibo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                    {orders.map((o) => (
-                      <tr key={o.id} className="hover:bg-slate-900/40 transition-colors">
-                        <td className="p-3.5 font-bold text-orange-400 font-mono">#{o.id}</td>
-                        <td className="p-3.5">
-                          <div className="font-bold text-white">{o.cliente_nombre || 'Cliente Obra'}</div>
-                          <div className="text-[11px] text-slate-400">{o.telefono || o.direccion_envio}</div>
-                        </td>
-                        <td className="p-3.5 text-slate-400">
-                          {new Date(o.creado_en).toLocaleString('es-CO')}
-                        </td>
-                        <td className="p-3.5">
-                          <div className="space-y-1">
-                            {(o.detalle || []).map((det, i) => (
-                              <div key={i} className="text-[11px] text-slate-300">
-                                • {det.cantidad}x {det.nombre_producto}
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3.5 font-mono font-bold text-white">
-                          ${Number(o.total).toLocaleString('es-CO')}
-                        </td>
-                        <td className="p-3.5">
-                          <select
-                            value={o.estado}
-                            onChange={(e) => handleStatusChange(o.id, e.target.value)}
-                            className="bg-slate-950 border border-slate-800 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-orange-500 text-white"
-                          >
-                            <option value="Pendiente">Pendiente</option>
-                            <option value="Confirmado">Confirmado</option>
-                            <option value="En preparación">En preparación</option>
-                            <option value="En camino">En camino</option>
-                            <option value="Entregado">Entregado</option>
-                            <option value="Cancelado">Cancelado</option>
-                          </select>
+                    {filteredOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="p-8 text-center text-slate-500">
+                          No hay pedidos registrados para el filtro seleccionado.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredOrders.map((o) => {
+                        const { day, month } = extractDateParts(o.creado_en);
+                        return (
+                          <tr key={o.id} className="hover:bg-slate-900/40 transition-colors">
+                            <td className="p-3.5 font-bold text-orange-400 font-mono">#{o.id}</td>
+                            <td className="p-3.5">
+                              <div className="font-bold text-white">{o.cliente_nombre || 'Cliente Obra'}</div>
+                              <div className="text-[11px] text-slate-400">{o.telefono || o.direccion_envio}</div>
+                            </td>
+                            <td className="p-3.5 text-slate-300">
+                              <div className="font-semibold">{new Date(o.creado_en).toLocaleString('es-CO')}</div>
+                              <div className="text-[10px] text-slate-500 font-mono">Día: {day} | Mes: {month}</div>
+                            </td>
+                            <td className="p-3.5">
+                              <div className="space-y-1">
+                                {(o.detalle || []).map((det, i) => (
+                                  <div key={i} className="text-[11px] text-slate-300">
+                                    • {det.cantidad}x {det.nombre_producto}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="p-3.5 font-mono font-bold text-white">
+                              ${Number(o.total).toLocaleString('es-CO')}
+                            </td>
+                            <td className="p-3.5">
+                              <select
+                                value={o.estado}
+                                onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                                className="bg-slate-950 border border-slate-800 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-orange-500 text-white"
+                              >
+                                <option value="Pendiente">Pendiente</option>
+                                <option value="Confirmado">Confirmado</option>
+                                <option value="En preparación">En preparación</option>
+                                <option value="En camino">En camino</option>
+                                <option value="Entregado">Entregado</option>
+                                <option value="Cancelado">Cancelado</option>
+                              </select>
+                            </td>
+                            <td className="p-3.5 text-right">
+                              <button
+                                onClick={() => handleDownloadSingleOrderReceipt(o)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-orange-600 text-slate-200 hover:text-white text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Descargar Recibo PDF de este pedido"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>PDF</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* TAB 3: REPORTES DE VENTAS */}
-          {activeTab === 'reportes' && reports && (
+          {/* ============================================================== */}
+          {/* TAB 3: REPORTES DE VENTAS (CATEGORIZADO DÍA / MES / AÑO)       */}
+          {/* ============================================================== */}
+          {activeTab === 'reportes' && (
             <div className="space-y-6">
-              
+              {/* Barra de categorización Día / Mes / Año y Descarga */}
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 mr-1">
+                    <Calendar className="w-4 h-4 text-orange-400" />
+                    Categorizar Ventas por:
+                  </span>
+                  {[
+                    { id: 'dia', label: 'Por Día' },
+                    { id: 'mes', label: 'Por Mes' },
+                    { id: 'anio', label: 'Por Año' }
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setSalesPeriodMode(m.id);
+                        setSalesFilterValue('');
+                      }}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        salesPeriodMode === m.id
+                          ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+
+                  <select
+                    value={salesFilterValue}
+                    onChange={(e) => setSalesFilterValue(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-lg px-3 py-1.5 focus:border-orange-500"
+                  >
+                    <option value="">
+                      -- Ver todos los {salesPeriodMode === 'dia' ? 'días' : salesPeriodMode === 'mes' ? 'meses' : 'años'} --
+                    </option>
+                    {(salesBreakdowns[salesPeriodMode] || []).map((row) => (
+                      <option key={row.periodo} value={row.periodo}>
+                        {row.label} (${Number(row.ingresos).toLocaleString('es-CO')})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadSalesPDF}
+                    className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-orange-600/20 transition-all cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Descargar Reporte PDF</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadSalesCSV}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Exportar Excel (CSV)</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Summary KPIs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="glass-card p-5 rounded-2xl border border-slate-800">
@@ -454,9 +1002,13 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                     Ingresos Totales Brutos
                   </span>
                   <div className="text-2xl font-black text-orange-400 font-mono mt-1">
-                    ${Number(reports.totalGeneral?.ingresos_totales || 0).toLocaleString('es-CO')}
+                    ${Number(
+                      currentSalesRows.reduce((s, r) => s + Number(r.ingresos || 0), 0) ||
+                      reports?.totalGeneral?.ingresos_totales ||
+                      0
+                    ).toLocaleString('es-CO')}
                   </div>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">Ventas facturadas</span>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">Ventas facturadas en vista</span>
                 </div>
 
                 <div className="glass-card p-5 rounded-2xl border border-slate-800">
@@ -464,7 +1016,9 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                     Total Órdenes Concluidas
                   </span>
                   <div className="text-2xl font-black text-white font-mono mt-1">
-                    {reports.totalGeneral?.total_pedidos || 0}
+                    {currentSalesRows.reduce((s, r) => s + Number(r.total_pedidos || 0), 0) ||
+                      reports?.totalGeneral?.total_pedidos ||
+                      0}
                   </div>
                   <span className="text-[11px] text-slate-500 mt-0.5 block">Despachos coordinados</span>
                 </div>
@@ -474,31 +1028,86 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                     Ticket Promedio
                   </span>
                   <div className="text-2xl font-black text-emerald-400 font-mono mt-1">
-                    ${reports.totalGeneral?.total_pedidos > 0 
-                      ? Math.round(reports.totalGeneral.ingresos_totales / reports.totalGeneral.total_pedidos).toLocaleString('es-CO')
-                      : 0}
+                    ${(() => {
+                      const totIng = currentSalesRows.reduce((s, r) => s + Number(r.ingresos || 0), 0);
+                      const totPed = currentSalesRows.reduce((s, r) => s + Number(r.total_pedidos || 0), 0);
+                      return totPed > 0 ? Math.round(totIng / totPed).toLocaleString('es-CO') : 0;
+                    })()}
                   </div>
                   <span className="text-[11px] text-slate-500 mt-0.5 block">COP por orden</span>
                 </div>
 
                 <div className="glass-card p-5 rounded-2xl border border-slate-800">
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-                    Rotación de Patio
+                    Periodos Registrados ({salesPeriodMode === 'dia' ? 'Días' : salesPeriodMode === 'mes' ? 'Meses' : 'Años'})
                   </span>
                   <div className="text-2xl font-black text-cyan-400 font-mono mt-1">
-                    Alta
+                    {currentSalesRows.length}
                   </div>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">Ladrillo tolete y bloque</span>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">Con facturación activa</span>
                 </div>
+              </div>
+
+              {/* Tabla Categorizada por Día / Mes / Año */}
+              <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+                <div className="px-5 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                  <h3 className="font-heading font-bold text-sm text-white uppercase tracking-wider">
+                    Desglose de Ventas Categorizado por {salesPeriodMode === 'dia' ? 'Día (YYYY-MM-DD)' : salesPeriodMode === 'mes' ? 'Mes (YYYY-MM)' : 'Año (YYYY)'}
+                  </h3>
+                  <span className="text-xs text-slate-400">
+                    {currentSalesRows.length} {currentSalesRows.length === 1 ? 'registro' : 'registros'}
+                  </span>
+                </div>
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900/60 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5">
+                        {salesPeriodMode === 'dia' ? 'Fecha (Día)' : salesPeriodMode === 'mes' ? 'Mes y Año' : 'Año Fiscal'}
+                      </th>
+                      <th className="p-3.5">Órdenes Facturadas</th>
+                      <th className="p-3.5">Ticket Promedio (COP)</th>
+                      <th className="p-3.5 text-right">Ingresos Totales (COP)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-200 font-mono">
+                    {currentSalesRows.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="p-8 text-center text-slate-500 font-sans">
+                          No hay ventas registradas para este periodo.
+                        </td>
+                      </tr>
+                    ) : (
+                      currentSalesRows.map((row) => (
+                        <tr key={row.periodo} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="p-3.5 font-bold text-white font-sans flex items-center gap-2">
+                            <Calendar className="w-3.5 h-3.5 text-orange-400" />
+                            <span>{row.label || row.periodo}</span>
+                          </td>
+                          <td className="p-3.5">
+                            <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200 font-bold">
+                              {row.total_pedidos} órdenes
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-slate-300">
+                            ${row.total_pedidos > 0 ? Math.round(row.ingresos / row.total_pedidos).toLocaleString('es-CO') : 0}
+                          </td>
+                          <td className="p-3.5 text-right font-bold text-emerald-400">
+                            ${Number(row.ingresos || 0).toLocaleString('es-CO')} COP
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
 
               {/* Top Products */}
               <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
                 <h3 className="font-heading font-bold text-sm text-white uppercase tracking-wider">
-                  Top 5 Materiales Más Vendidos
+                  Top Materiales Más Vendidos
                 </h3>
                 <div className="space-y-2">
-                  {(reports.topProductos || []).map((tp, idx) => (
+                  {(reports?.topProductos || []).map((tp, idx) => (
                     <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs">
                       <div className="flex items-center gap-2.5">
                         <span className="w-5 h-5 rounded-full bg-orange-600/20 text-orange-400 font-bold flex items-center justify-center font-mono">
@@ -506,8 +1115,15 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                         </span>
                         <span className="font-bold text-white">{tp.nombre_producto}</span>
                       </div>
-                      <div className="font-mono text-slate-300">
-                        <strong className="text-orange-400">{Number(tp.unidades_vendidas).toLocaleString('es-CO')}</strong> unidades
+                      <div className="font-mono text-slate-300 flex items-center gap-4">
+                        <span>
+                          <strong className="text-orange-400">{Number(tp.unidades_vendidas).toLocaleString('es-CO')}</strong> unidades
+                        </span>
+                        {tp.ingresos_generados !== undefined && (
+                          <span className="text-emerald-400 font-bold">
+                            ${Number(tp.ingresos_generados).toLocaleString('es-CO')} COP
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -517,18 +1133,131 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* TAB 4: MOVIMIENTOS DE INVENTARIO */}
+          {/* ============================================================== */}
+          {/* TAB 4: HISTORIAL DE ENTRADAS/SALIDAS (DÍA / MES / AÑO)         */}
+          {/* ============================================================== */}
           {activeTab === 'movimientos' && (
-            <div className="space-y-4">
-              <span className="text-xs text-slate-400 font-semibold">
-                Registro de auditoría de entradas y salidas de patio:
-              </span>
+            <div className="space-y-5">
+              {/* Barra de categorización y descarga */}
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 mr-1">
+                    <Calendar className="w-4 h-4 text-orange-400" />
+                    Categorizar por:
+                  </span>
+                  {[
+                    { id: 'todos', label: 'Todos' },
+                    { id: 'dia', label: 'Por Día' },
+                    { id: 'mes', label: 'Por Mes' },
+                    { id: 'anio', label: 'Por Año' }
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setMovFilterMode(m.id);
+                        setMovSelectedPeriod('');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        movFilterMode === m.id
+                          ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+
+                  {movFilterMode !== 'todos' && (
+                    <select
+                      value={movSelectedPeriod}
+                      onChange={(e) => setMovSelectedPeriod(e.target.value)}
+                      className="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-lg px-3 py-1.5 focus:border-orange-500"
+                    >
+                      <option value="">
+                        -- Todos los {movFilterMode === 'dia' ? 'días' : movFilterMode === 'mes' ? 'meses' : 'años'} --
+                      </option>
+                      {(movementsCategorized[movFilterMode] || []).map((g) => (
+                        <option key={g.period} value={g.period}>
+                          {g.label} (+{g.entradas} / -{g.salidas} unid.)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <select
+                    value={movTypeFilter}
+                    onChange={(e) => setMovTypeFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-lg px-2.5 py-1.5 focus:border-orange-500"
+                  >
+                    <option value="Todos">Entradas y Salidas</option>
+                    <option value="entrada">Solo Entradas (+)</option>
+                    <option value="salida">Solo Salidas (-)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadMovementsPDF}
+                    className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-orange-600/20 transition-all cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Descargar PDF</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadMovementsCSV}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Exportar Excel (CSV)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Resumen categorizado de movimientos por Día, Mes o Año */}
+              {movFilterMode !== 'todos' && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-orange-400">
+                    Resumen de Entradas y Salidas por {movFilterMode === 'dia' ? 'Día' : movFilterMode === 'mes' ? 'Mes' : 'Año'} (Haz clic para filtrar)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {(movementsCategorized[movFilterMode] || []).map((grp) => {
+                      const isSelected = movSelectedPeriod === grp.period;
+                      return (
+                        <button
+                          key={grp.period}
+                          onClick={() => setMovSelectedPeriod(isSelected ? '' : grp.period)}
+                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-orange-600/20 border-orange-500 shadow-lg'
+                              : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold text-white">{grp.label}</span>
+                            <span className="text-[10px] font-bold text-slate-400">{grp.count} mov.</span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between text-xs font-mono">
+                            <span className="text-emerald-400 font-bold">+{grp.entradas} ent.</span>
+                            <span className="text-rose-400 font-bold">-{grp.salidas} sal.</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-xs text-slate-400">
+                <span>
+                  Mostrando <strong className="text-white">{filteredMovements.length}</strong> movimientos de inventario ({getMovementsFilterLabel()})
+                </span>
+              </div>
 
               <div className="glass-panel rounded-xl overflow-hidden border border-slate-800">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
                     <tr>
-                      <th className="p-3.5">Fecha</th>
+                      <th className="p-3.5">Fecha (Día / Mes / Año)</th>
                       <th className="p-3.5">Tipo</th>
                       <th className="p-3.5">Material</th>
                       <th className="p-3.5">Cantidad</th>
@@ -536,21 +1265,37 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 text-slate-200 font-mono">
-                    {movements.map((m) => (
-                      <tr key={m.id} className="hover:bg-slate-900/40">
-                        <td className="p-3.5 text-slate-400">{new Date(m.fecha).toLocaleString('es-CO')}</td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
-                            m.tipo === 'entrada' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                          }`}>
-                            {m.tipo}
-                          </span>
+                    {filteredMovements.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="p-8 text-center text-slate-500 font-sans">
+                          No hay movimientos de inventario registrados para el filtro seleccionado.
                         </td>
-                        <td className="p-3.5 font-bold text-white font-sans">{m.nombre_producto}</td>
-                        <td className="p-3.5 font-bold">{m.cantidad} unid.</td>
-                        <td className="p-3.5 text-slate-400 font-sans">{m.nota}</td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredMovements.map((m) => {
+                        const { day, month } = extractDateParts(m.fecha);
+                        return (
+                          <tr key={m.id} className="hover:bg-slate-900/40">
+                            <td className="p-3.5 text-slate-300">
+                              <div>{new Date(m.fecha).toLocaleString('es-CO')}</div>
+                              <div className="text-[10px] text-slate-500">Día: {day} | Mes: {month}</div>
+                            </td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
+                                m.tipo === 'entrada' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                              }`}>
+                                {m.tipo}
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-bold text-white font-sans">{m.nombre_producto}</td>
+                            <td className="p-3.5 font-bold">
+                              {m.tipo === 'entrada' ? '+' : '-'}{m.cantidad} unid.
+                            </td>
+                            <td className="p-3.5 text-slate-400 font-sans">{m.nota}</td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>

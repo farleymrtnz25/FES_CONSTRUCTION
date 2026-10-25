@@ -11,6 +11,7 @@ import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
 import { CartSidebar } from './components/CartSidebar';
 import { CheckoutModal } from './components/CheckoutModal';
+import { UserProfileModal } from './components/UserProfileModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { CookieBanner } from './components/CookieBanner';
@@ -21,7 +22,7 @@ import { NotFoundPage } from './components/NotFoundPage';
 const VALID_TABS = ['home', 'catalogo', 'cotizador', 'planta', 'resenas', 'contacto'];
 
 function MainApp() {
-  const { user, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const [currentTab, setCurrentTab] = useState('home');
   const [selectedCatalogCategory, setSelectedCatalogCategory] = useState('Todos');
   const [aiInitialQuery, setAiInitialQuery] = useState('');
@@ -30,6 +31,7 @@ function MainApp() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [legalModal, setLegalModal] = useState({ open: false, type: null });
   const [is404, setIs404] = useState(false);
 
@@ -44,6 +46,12 @@ function MainApp() {
         } else {
           setAuthModalOpen(true);
         }
+      } else if (hash === 'perfil' || hash === 'recibos') {
+        setIs404(false);
+        setProfileModalOpen(true);
+      } else if (hash === 'finalizar' || hash === 'checkout') {
+        setIs404(false);
+        setCheckoutModalOpen(true);
       } else if (hash === '404') {
         setIs404(true);
       } else if (VALID_TABS.includes(hash)) {
@@ -69,6 +77,14 @@ function MainApp() {
       }
       return;
     }
+    if (tabId === 'perfil') {
+      setProfileModalOpen(true);
+      return;
+    }
+    if (tabId === 'checkout') {
+      setCheckoutModalOpen(true);
+      return;
+    }
     setIs404(false);
     setCurrentTab(tabId);
     window.location.hash = tabId;
@@ -90,7 +106,8 @@ function MainApp() {
           onSelectTab={handleSelectTab}
           onOpenAuth={() => setAuthModalOpen(true)}
           onOpenAdmin={() => setAdminModalOpen(true)}
-          onViewOrders={() => setCheckoutModalOpen(true)}
+          onOpenProfile={() => setProfileModalOpen(true)}
+          onOpenCheckout={() => setCheckoutModalOpen(true)}
         />
         <main className="fes-main-content fes-container">
           <NotFoundPage onGoHome={() => handleSelectTab('home')} />
@@ -117,7 +134,8 @@ function MainApp() {
         }}
         onOpenAuth={() => setAuthModalOpen(true)}
         onOpenAdmin={() => setAdminModalOpen(true)}
-        onViewOrders={() => setCheckoutModalOpen(true)}
+        onOpenProfile={() => setProfileModalOpen(true)}
+        onOpenCheckout={() => setCheckoutModalOpen(true)}
       />
 
       {/* 2. Área Principal de la Pestaña Activa */}
@@ -166,7 +184,15 @@ function MainApp() {
       
       <CheckoutModal 
         isOpen={checkoutModalOpen} 
-        onClose={() => setCheckoutModalOpen(false)} 
+        onClose={() => setCheckoutModalOpen(false)}
+        onOpenProfile={() => setProfileModalOpen(true)}
+      />
+
+      <UserProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenCheckout={() => setCheckoutModalOpen(true)}
       />
 
       <AdminDashboard 
