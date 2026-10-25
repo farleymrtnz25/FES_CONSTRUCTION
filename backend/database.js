@@ -299,10 +299,56 @@ function executeFallback(sql, params = []) {
     return [{ affectedRows: 1 }];
   }
 
-  if (qUpper.includes('FROM PEDIDOS') && qUpper.includes('COUNT(*) AS TOTAL_PEDIDOS')) {
+  if (qUpper.includes('FROM PEDIDOS') && qUpper.includes('COUNT(*) AS TOTAL_PEDIDOS') && !qUpper.includes('GROUP BY')) {
     const valid = memStore.pedidos.filter(p => p.estado !== 'Cancelado');
     const ingresos = valid.reduce((s, p) => s + Number(p.total || 0), 0);
     return [[{ total_pedidos: valid.length, ingresos_totales: ingresos }]];
+  }
+
+  if (qUpper.includes('FROM PEDIDOS') && qUpper.includes('GROUP BY')) {
+    const valid = memStore.pedidos.filter(p => p.estado !== 'Cancelado');
+    const groups = {};
+    for (const p of valid) {
+      const d = p.creado_en ? new Date(p.creado_en) : new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      if (qUpper.includes("'%Y-%M'") || qUpper.includes('GROUP BY ANIO, MES')) {
+        const key = `${yyyy}-${mm}`;
+        if (!groups[key]) groups[key] = { anio: yyyy, mes: Number(mm), periodo: key, total_pedidos: 0, ingresos: 0 };
+        groups[key].total_pedidos += 1;
+        groups[key].ingresos += Number(p.total || 0);
+      } else if (qUpper.includes('GROUP BY YEAR')) {
+        const key = `${yyyy}`;
+        if (!groups[key]) groups[key] = { anio: yyyy, total_pedidos: 0, ingresos: 0 };
+        groups[key].total_pedidos += 1;
+        groups[key].ingresos += Number(p.total || 0);
+      } else {
+        const key = `${yyyy}-${mm}-${dd}`;
+        if (!groups[key]) groups[key] = { fecha: key, total_pedidos: 0, ingresos: 0 };
+        groups[key].total_pedidos += 1;
+        groups[key].ingresos += Number(p.total || 0);
+      }
+    }
+    return [Object.values(groups)];
+  }
+
+  if (qUpper.includes('FROM DETALLE_PEDIDO') && qUpper.includes('GROUP BY')) {
+    const prodMap = {};
+    for (const d of memStore.detalle_pedido) {
+      const k = d.producto_id || d.nombre_producto;
+      if (!prodMap[k]) {
+        prodMap[k] = {
+          producto_id: d.producto_id,
+          nombre_producto: d.nombre_producto,
+          unidades_vendidas: 0,
+          ingresos_generados: 0
+        };
+      }
+      prodMap[k].unidades_vendidas += Number(d.cantidad || 0);
+      prodMap[k].ingresos_generados += Number(d.subtotal || 0);
+    }
+    return [Object.values(prodMap).sort((a, b) => b.unidades_vendidas - a.unidades_vendidas).slice(0, 10)];
   }
 
   if (qUpper.includes('FROM PEDIDOS') && !qUpper.includes('GROUP BY')) {
@@ -403,6 +449,7 @@ pool.getConnection()
         if (!names.has('cliente_nombre')) {
           await conn.query("ALTER TABLE pedidos ADD COLUMN cliente_nombre VARCHAR(150) NULL");
         }
+        await conn.query("ALTER TABLE pedidos MODIFY COLUMN estado VARCHAR(50) DEFAULT 'Pendiente'");
       }
     } catch (migErr) {
       console.warn('Nota de verificación de columnas:', migErr.message);
