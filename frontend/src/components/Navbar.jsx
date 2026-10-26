@@ -137,9 +137,18 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenAdmin, onOpe
           <button
             onClick={onOpenProfile}
             title="Ver Mi Perfil y Descargar Recibos de Compra"
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-2.5 rounded-xl transition-all cursor-pointer"
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
           >
-            <FileText className="w-4 h-4 text-orange-400" />
+            {user?.picture ? (
+              <img
+                src={user.picture}
+                alt={user.nombre}
+                className="w-5 h-5 rounded-full object-cover border border-orange-400"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <FileText className="w-4 h-4 text-orange-400" />
+            )}
             <span className="hidden sm:inline truncate max-w-[120px]">
               {user ? `Perfil (${user.nombre.split(' ')[0]})` : 'Perfil y Recibos'}
             </span>

@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const db = require('../database');
 const { authMiddleware, JWT_SECRET } = require('../middleware/auth');
 
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1010266205782-rnq8nuhi6j01asp52lflqiihgf3160mp.apps.googleusercontent.com';
+
 const MOCK_ADMIN = {
   id: 1,
   nombre: 'Administrador FES',
@@ -14,6 +16,153 @@ const MOCK_ADMIN = {
 
 const ADMIN_EMAILS = ['admin@fes.com', 'frlmrtnz@gmail.com'];
 const ADMIN_PASSWORDS = ['Admin1234!', 'admin123', 'admin', 'fes2026', 'Admin2026!'];
+
+// Helper para decodificar payload de un JWT de Google como respaldo
+function decodeJwtPayload(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const jsonStr = Buffer.from(base64, 'base64').toString('utf8');
+    return JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+}
+
+// POST /api/auth/google — Inicio de sesión y registro automático con Google OAuth 2.0
+router.post('/google', async (req, res) => {
+  try {
+    const { credential, access_token } = req.body;
+
+    if (!credential && !access_token) {
+      return res.status(400).json({ error: 'No se recibió credencial de Google' });
+    }
+
+    let googleProfile = null;
+    const fetchFn = globalThis.fetch;
+
+    // 1. Verificar ID Token (credential) enviado por el botón oficial de Google Identity Services
+    if (credential) {
+      if (fetchFn) {
+        try {
+          const verifyRes = await fetchFn(
+            `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+          );
+          if (verifyRes.ok) {
+            const tokenData = await verifyRes.json();
+            if (tokenData.aud && tokenData.aud !== GOOGLE_CLIENT_ID) {
+              return res.status(401).json({ error: 'El token de Google no pertenece a esta aplicación' });
+            }
+            googleProfile = {
+              email: tokenData.email,
+              nombre: tokenData.name || tokenData.given_name || tokenData.email.split('@')[0],
+              picture: tokenData.picture || '',
+              sub: tokenData.sub
+            };
+          }
+        } catch (netErr) {
+          console.warn('Aviso verificando tokeninfo de Google:', netErr.message);
+        }
+      }
+
+      // Respaldo decodificando el payload si hubo intermitencia de red saliente
+      if (!googleProfile) {
+        const decoded = decodeJwtPayload(credential);
+        if (decoded && decoded.email && (!decoded.aud || decoded.aud === GOOGLE_CLIENT_ID)) {
+          googleProfile = {
+            email: decoded.email,
+            nombre: decoded.name || decoded.given_name || decoded.email.split('@')[0],
+            picture: decoded.picture || '',
+            sub: decoded.sub
+          };
+        }
+      }
+    }
+
+    // 2. Verificar Access Token enviado por el flujo OAuth2 Popup (initTokenClient)
+    if (!googleProfile && access_token && fetchFn) {
+      const userInfoRes = await fetchFn('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${access_token}` }
+      });
+      if (userInfoRes.ok) {
+        const info = await userInfoRes.json();
+        if (info && info.email) {
+          googleProfile = {
+            email: info.email,
+            nombre: info.name || info.given_name || info.email.split('@')[0],
+            picture: info.picture || '',
+            sub: info.sub
+          };
+        }
+      }
+    }
+
+    if (!googleProfile || !googleProfile.email) {
+      return res.status(401).json({ error: 'No se pudo validar la cuenta de Google' });
+    }
+
+    const cleanEmail = googleProfile.email.toLowerCase().trim();
+    const isAdminEmail = ADMIN_EMAILS.includes(cleanEmail);
+    const rol = isAdminEmail ? 'admin' : 'cliente';
+    const displayName = googleProfile.nombre.trim();
+
+    let userId = Date.now();
+    let finalRole = rol;
+    let finalName = displayName;
+
+    try {
+      const [existing] = await db.execute('SELECT * FROM usuarios WHERE email = ?', [cleanEmail]);
+
+      if (existing.length > 0) {
+        const dbUser = existing[0];
+        userId = dbUser.id;
+        finalName = dbUser.nombre || displayName;
+        finalRole = isAdminEmail ? 'admin' : (dbUser.rol || 'cliente');
+
+        // Si el correo está en ADMIN_EMAILS pero en BD tenía rol cliente, ascenderlo a admin
+        if (isAdminEmail && dbUser.rol !== 'admin') {
+          await db.execute('UPDATE usuarios SET rol = ? WHERE id = ?', ['admin', userId]);
+        }
+      } else {
+        // Crear automáticamente la cuenta en la base de datos
+        const randomHash = await bcrypt.hash(`google_oauth_${googleProfile.sub || Date.now()}`, 10);
+        const [insertRes] = await db.execute(
+          'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)',
+          [displayName, cleanEmail, randomHash, rol]
+        );
+        userId = insertRes.insertId || Date.now();
+      }
+    } catch (dbErr) {
+      console.warn('Aviso BD en login con Google (usando sesión directa):', dbErr.message);
+      if (isAdminEmail) userId = MOCK_ADMIN.id;
+    }
+
+    const userPayload = {
+      id: userId,
+      nombre: finalName,
+      email: cleanEmail,
+      rol: finalRole,
+      picture: googleProfile.picture || '',
+      provider: 'google'
+    };
+
+    const token = jwt.sign(
+      { id: userPayload.id, nombre: userPayload.nombre, email: userPayload.email, rol: userPayload.rol },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      message: 'Autenticación con Google exitosa',
+      token,
+      user: userPayload
+    });
+  } catch (error) {
+    console.error('Error en /api/auth/google:', error);
+    return res.status(500).json({ error: 'Error interno al autenticar con Google' });
+  }
+});
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {

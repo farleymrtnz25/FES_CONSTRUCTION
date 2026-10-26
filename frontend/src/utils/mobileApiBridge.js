@@ -232,6 +232,31 @@ async function handleOfflineFallback(apiPath, options = {}) {
     return jsonResponse({ error: 'Credenciales inválidas' }, 401);
   }
 
+  if (pathname === '/api/auth/google' && method === 'POST') {
+    try {
+      if (body.credential) {
+        const parts = body.credential.split('.');
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const emailClean = String(payload.email || '').toLowerCase();
+        const isAdmin = emailClean === 'frlmrtnz@gmail.com' || emailClean === 'admin@fes.com';
+        return jsonResponse({
+          token: `mobile-google-token-${Date.now()}`,
+          user: {
+            id: isAdmin ? 1 : Date.now(),
+            nombre: payload.name || payload.given_name || emailClean.split('@')[0],
+            email: emailClean,
+            rol: isAdmin ? 'admin' : 'cliente',
+            picture: payload.picture || '',
+            provider: 'google'
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+    return jsonResponse({ error: 'No se pudo autenticar con Google sin conexión' }, 400);
+  }
+
   if (pathname === '/api/auth/register' && method === 'POST') {
     const localUsers = JSON.parse(localStorage.getItem('fes_mobile_users') || '[]');
     const emailClean = String(body.email || '').trim().toLowerCase();

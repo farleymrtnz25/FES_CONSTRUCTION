@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 
+export const GOOGLE_CLIENT_ID =
+  '1010266205782-rnq8nuhi6j01asp52lflqiihgf3160mp.apps.googleusercontent.com';
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     try {
@@ -72,7 +75,47 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithGoogle = async ({ credential, access_token }) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential, access_token })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión con Google');
+
+      setToken(data.token);
+      setUser(data.user);
+
+      // Guardar nombre en el perfil rápido si aún no existe
+      try {
+        const extra = JSON.parse(localStorage.getItem('fes_profile_extra') || '{}');
+        if (!extra.nombre && data.user?.nombre) {
+          extra.nombre = data.user.nombre;
+          localStorage.setItem('fes_profile_extra', JSON.stringify(extra));
+        }
+      } catch {
+        // ignore
+      }
+
+      return { success: true, user: data.user };
+    } catch (err) {
+      return { success: false, error: err.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
+    try {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.disableAutoSelect();
+      }
+    } catch {
+      // ignore
+    }
     setUser(null);
     setToken(null);
     localStorage.removeItem('fes_token');
@@ -82,7 +125,7 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = user && user.rol === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, token, isAdmin, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, isAdmin, loading, login, register, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
