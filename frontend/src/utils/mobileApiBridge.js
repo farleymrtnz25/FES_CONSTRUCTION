@@ -378,35 +378,110 @@ async function handleOfflineFallback(apiPath, options = {}) {
     });
   }
 
-  // 5. COTIZADOR IA DE CONTINGENCIA MÓVIL
+  // 5. COTIZADOR IA DE CONTINGENCIA MÓVIL (4 MODOS: Área, Unidades, Presupuesto y Recomendación)
   if (pathname === '/api/ia/consultar' && method === 'POST') {
     const msg = String(body.mensaje || '').toLowerCase();
-    const numMatch = msg.match(/(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros)/i) || msg.match(/(\d+)/);
-    const area = numMatch ? Math.max(1, parseFloat(numMatch[1].replace(',', '.'))) : 50;
     const prods = getLocalProducts();
-    let chosen = prods[1] || DEFAULT_CATALOG_23[1];
-    for (const p of prods) {
-      if (msg.includes(p.nombre.toLowerCase())) {
-        chosen = p;
-        break;
-      }
-    }
+    let chosen = prods.find((p) => msg.includes(p.nombre.toLowerCase())) ||
+      (msg.includes('bloque') ? prods.find((p) => p.id === 5) : null) ||
+      (msg.includes('santaf') || msg.includes('liviano') ? prods.find((p) => p.id === 11) : null) ||
+      (msg.includes('tableta') ? prods.find((p) => p.id === 16) : null) ||
+      (msg.includes('refractario') ? prods.find((p) => p.id === 13) : null) ||
+      prods[1] ||
+      DEFAULT_CATALOG_23[1];
+
     let rend = 56;
-    if (chosen.nombre.toLowerCase().includes('grande')) rend = 36;
-    else if (chosen.nombre.toLowerCase().includes('bloque')) rend = 12.5;
+    if (chosen.nombre.toLowerCase().includes('grande')) rend = 38;
+    else if (chosen.nombre.toLowerCase().includes('bloquel')) rend = 5;
+    else if (chosen.nombre.toLowerCase().includes('bloque')) rend = 13;
     else if (chosen.nombre.toLowerCase().includes('tableta')) rend = 25;
     else if (chosen.nombre.toLowerCase().includes('adoqu')) rend = 45;
-    else if (chosen.categoria === 'Agregados') rend = 1;
+    else if (chosen.categoria === 'Agregados') rend = 0.02;
 
-    const unidades = Math.ceil(area * rend * 1.07);
-    const costo = unidades * Number(chosen.precio);
+    const precioUnit = Number(chosen.precio);
+
+    // Modo 1: Presupuesto en dinero ($ COP)
+    let presupuesto = null;
+    if (/un\s+mill[oó]n/i.test(msg)) presupuesto = 1000000;
+    else {
+      const mMillon = msg.match(/(\d+(?:[.,]\d+)?)\s*mill[oó]n(?:es)?/i);
+      const mPuntos = msg.match(/\$?\s*(\d{1,3}(?:\.\d{3}){2,}|\d{3}\.\d{3})\b/);
+      const mGrande = msg.match(/\b(\d{5,9})\b/);
+      if (mMillon) presupuesto = Math.round(parseFloat(mMillon[1].replace(',', '.')) * 1000000);
+      else if (mPuntos) presupuesto = parseInt(mPuntos[1].replace(/\./g, ''), 10);
+      else if (mGrande && /pesos|presupuesto|cop|\$|alcanza/i.test(msg)) presupuesto = parseInt(mGrande[1], 10);
+    }
+
+    if (presupuesto && presupuesto >= 20000) {
+      const unidades = Math.max(1, Math.floor(presupuesto / precioUnit));
+      const areaAlcanzada = +(unidades / rend).toFixed(1);
+      const costo = unidades * precioUnit;
+      return jsonResponse({
+        respuesta: `Cálculo por Presupuesto Disponible ($${presupuesto.toLocaleString('es-CO')} COP):\nMaterial: ${chosen.nombre} (${chosen.medidas}) a $${precioUnit.toLocaleString('es-CO')} COP c/u.\nUnidades que puedes comprar: ${unidades.toLocaleString('es-CO')} unidades.\nÁrea total que puedes construir: ${areaAlcanzada} m² (equivale a un muro de 2.40m de alto por ${+(areaAlcanzada / 2.4).toFixed(1)}m de largo).`,
+        calculo: {
+          area_m2: areaAlcanzada,
+          material_principal: chosen.nombre,
+          unidades_estimadas: unidades,
+          costo_total_cop: costo,
+          items: [{ id: chosen.id, nombre: chosen.nombre, precio: precioUnit, medidas: chosen.medidas, imagen: chosen.imagen, categoria: chosen.categoria, cantidad: unidades }]
+        }
+      });
+    }
+
+    // Modo 2: Recomendación por facilidad, rapidez o economía
+    if (/recomiend|f[aá]cil|r[aá]pido|econ[oó]mico|barato|mejor\s+material|qu[eé]\s+material/i.test(msg)) {
+      const recProd = /fachada|vista/i.test(msg)
+        ? (prods.find((p) => p.id === 11) || chosen)
+        : (prods.find((p) => p.id === 5) || chosen);
+      const recRend = recProd.id === 5 ? 13 : 56;
+      const areaRef = 50;
+      const unidades = Math.ceil(areaRef * recRend);
+      const costo = unidades * Number(recProd.precio);
+      return jsonResponse({
+        respuesta: `Recomendación técnica del Ing. FES:\n• Por FACILIDAD Y RAPIDEZ: Bloque número 4 (solo 13 u/m², rinde 4.3 veces más rápido que el ladrillo pequeño y ahorra 60% de mortero).\n• Por ECONOMÍA POR m²: Bloque número 4 (~$13.650/m²) o Ladrillo pequeño rosado (~$14.560/m²).\n• Para FACHADA A LA VISTA (sin pañete): Ladrillo Prensado Santafé o Prisma.\n\nCotización base para ${areaRef} m² con ${recProd.nombre}: ${unidades.toLocaleString('es-CO')} unidades = $${costo.toLocaleString('es-CO')} COP.`,
+        calculo: {
+          area_m2: areaRef,
+          material_principal: recProd.nombre,
+          unidades_estimadas: unidades,
+          costo_total_cop: costo,
+          items: [{ id: recProd.id, nombre: recProd.nombre, precio: Number(recProd.precio), medidas: recProd.medidas, imagen: recProd.imagen, categoria: recProd.categoria, cantidad: unidades }]
+        }
+      });
+    }
+
+    // Modo 3: Con X ladrillos / unidades -> cuántos m² construyo
+    const msgSinDim = msg.replace(/\d+(?:[.,]\d+)?\s*[x*]\s*\d+(?:[.,]\d+)?(?:\s*[x*]\s*\d+(?:[.,]\d+)?)?/g, '');
+    const tieneM2 = /\b\d+(?:[.,]\d+)?\s*(?:m2|m²|metros\s*cuadrados)\b/i.test(msgSinDim);
+    const matchUnid = msgSinDim.match(/(\d{1,3}(?:\.\d{3})+|\d+)\s*(?:ladrillos?|bloques?|tabletas?|adoquines?|unidades?|piezas?)/i);
+    if (!tieneM2 && matchUnid) {
+      const unidades = parseInt(matchUnid[1].replace(/\./g, ''), 10) || 1000;
+      const areaConstruible = +(unidades / rend).toFixed(1);
+      const costo = unidades * precioUnit;
+      return jsonResponse({
+        respuesta: `Rendimiento constructivo con ${unidades.toLocaleString('es-CO')} unidades de ${chosen.nombre} (${chosen.medidas}):\n• Área que puedes construir: ${areaConstruible} m² (con 7% desperdicio NSR-10).\n• Equivale a un muro de 2.40 m de alto por ${+(areaConstruible / 2.4).toFixed(1)} m de largo.\n• Costo total de las ${unidades.toLocaleString('es-CO')} unidades: $${costo.toLocaleString('es-CO')} COP.`,
+        calculo: {
+          area_m2: areaConstruible,
+          material_principal: chosen.nombre,
+          unidades_estimadas: unidades,
+          costo_total_cop: costo,
+          items: [{ id: chosen.id, nombre: chosen.nombre, precio: precioUnit, medidas: chosen.medidas, imagen: chosen.imagen, categoria: chosen.categoria, cantidad: unidades }]
+        }
+      });
+    }
+
+    // Modo 4: Área (m²) -> Unidades y costo
+    const numMatch = msgSinDim.match(/(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros)/i) || msgSinDim.match(/(\d+)/);
+    const area = numMatch ? Math.max(1, parseFloat(numMatch[1].replace(',', '.'))) : 50;
+    const unidades = Math.ceil(area * rend);
+    const costo = unidades * precioUnit;
     return jsonResponse({
-      respuesta: `Cálculo estructural NSR-10 para ${area} m² con ${chosen.nombre} (${chosen.medidas}):\n\n• Rendimiento técnico: ${rend} unid/m²\n• Cantidad + 7% desperdicio: ${unidades.toLocaleString('es-CO')} unidades\n• Valor unitario en planta: $${Number(chosen.precio).toLocaleString('es-CO')} COP\n• Presupuesto total estimado: $${costo.toLocaleString('es-CO')} COP`,
+      respuesta: `Cálculo estructural NSR-10 para ${area} m² con ${chosen.nombre} (${chosen.medidas}):\n\n• Rendimiento técnico: ${rend} unid/m² (incluye 7% desperdicio)\n• Cantidad total: ${unidades.toLocaleString('es-CO')} unidades\n• Valor unitario en planta: $${precioUnit.toLocaleString('es-CO')} COP\n• Presupuesto total estimado: $${costo.toLocaleString('es-CO')} COP`,
       calculo: {
+        area_m2: area,
         material_principal: chosen.nombre,
         unidades_estimadas: unidades,
         costo_total_cop: costo,
-        items: [{ id: chosen.id, nombre: chosen.nombre, precio: Number(chosen.precio), medidas: chosen.medidas, imagen: chosen.imagen, categoria: chosen.categoria, cantidad: unidades }]
+        items: [{ id: chosen.id, nombre: chosen.nombre, precio: precioUnit, medidas: chosen.medidas, imagen: chosen.imagen, categoria: chosen.categoria, cantidad: unidades }]
       }
     });
   }
