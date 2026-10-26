@@ -229,15 +229,15 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
     if (Object.keys(dayMap).length === 0 && reports) {
       (reports.porDia || []).forEach((d) => {
         const key = typeof d.fecha === 'string' ? d.fecha.slice(0, 10) : extractDateParts(d.fecha).day;
-        dayMap[key] = { periodo: key, label: key, total_pedidos: Number(d.total_pedidos || 0), ingresos: Number(d.ingresos || 0) };
+        dayMap[key] = { periodo: key, label: key, total_pedidos: Number(d.total_pedidos ?? d.pedidos ?? 0), ingresos: Number(d.ingresos || 0) };
       });
       (reports.porMes || []).forEach((m) => {
-        const key = m.periodo || `${m.anio}-${String(m.mes).padStart(2, '0')}`;
-        monthMap[key] = { periodo: key, label: formatMonthLabel(key), total_pedidos: Number(m.total_pedidos || 0), ingresos: Number(m.ingresos || 0) };
+        const key = m.periodo || m.mes || `${m.anio || m.ano}-${String(m.mes).padStart(2, '0')}`;
+        monthMap[key] = { periodo: key, label: formatMonthLabel(key), total_pedidos: Number(m.total_pedidos ?? m.pedidos ?? 0), ingresos: Number(m.ingresos || 0) };
       });
-      (reports.porAnio || []).forEach((a) => {
-        const key = String(a.anio);
-        yearMap[key] = { periodo: key, label: `Año ${key}`, total_pedidos: Number(a.total_pedidos || 0), ingresos: Number(a.ingresos || 0) };
+      (reports.porAnio || reports.porAno || []).forEach((a) => {
+        const key = String(a.anio ?? a.ano);
+        yearMap[key] = { periodo: key, label: `Año ${key}`, total_pedidos: Number(a.total_pedidos ?? a.pedidos ?? 0), ingresos: Number(a.ingresos || 0) };
       });
     }
 
@@ -253,6 +253,18 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
     if (!salesFilterValue) return list;
     return list.filter((r) => r.periodo === salesFilterValue);
   }, [salesBreakdowns, salesPeriodMode, salesFilterValue]);
+
+  const filteredSalesOrders = useMemo(() => {
+    const baseList = orders.length > 0 ? orders.filter((o) => o.estado !== 'Cancelado') : (reports?.individual || []);
+    if (!salesFilterValue) return baseList;
+    return baseList.filter((o) => {
+      const { day, month, year } = extractDateParts(o.creado_en);
+      if (salesPeriodMode === 'dia') return day === salesFilterValue;
+      if (salesPeriodMode === 'mes') return month === salesFilterValue;
+      if (salesPeriodMode === 'anio') return year === salesFilterValue;
+      return true;
+    });
+  }, [orders, reports, salesPeriodMode, salesFilterValue]);
 
   // ============================================================================
   // 3. HISTORIAL DE ENTRADAS / SALIDAS: Categorización por Día, Mes y Año
@@ -339,7 +351,8 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
   const handleDownloadOrdersPDF = () => {
     exportOrdersReportPDF({
       orders: filteredOrders,
-      filterLabel: getOrdersFilterLabel()
+      filterLabel: getOrdersFilterLabel(),
+      categorizedSummary: ordersFilterMode !== 'todos' ? (ordersCategorized[ordersFilterMode] || []) : []
     });
     showNotify('Reporte de Gestión de Pedidos descargado en PDF.');
   };
@@ -348,17 +361,18 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
     const rows = filteredOrders.map((o) => {
       const { day, month, year } = extractDateParts(o.creado_en);
       return {
-        ID_Pedido: o.id,
-        Fecha_Hora: new Date(o.creado_en).toLocaleString('es-CO'),
+        ID_Pedido: `#${o.id}`,
+        Fecha_Hora: o.creado_en ? new Date(o.creado_en).toLocaleString('es-CO') : 'Reciente',
         Dia: day,
         Mes: month,
         Anio: year,
         Cliente: o.cliente_nombre || 'Cliente Obra',
-        Telefono: o.telefono || '',
-        Direccion_Entrega: o.direccion_envio || '',
-        Materiales: (o.detalle || []).map((d) => `${d.cantidad}x ${d.nombre_producto}`).join('; '),
-        Total_COP: Number(o.total || 0),
-        Estado: o.estado || 'Pendiente'
+        Telefono: o.telefono || 'No registrado',
+        Direccion_Entrega: o.direccion_envio || 'Planta / Sabana',
+        Materiales_Solicitados: (o.detalle || []).map((d) => `${d.cantidad}x ${d.nombre_producto}`).join(' | ') || 'Materiales varios',
+        Metodo_Pago: o.metodo_pago || 'WhatsApp',
+        Estado_Despacho: o.estado || 'Pendiente',
+        Total_COP: Number(o.total || 0)
       };
     });
     exportToCSV(`FES_Gestion_Pedidos_${ordersFilterMode}`, rows);
@@ -378,27 +392,46 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
         total_pedidos: totalPedidosPeriodo || reports?.totalGeneral?.total_pedidos || 0
       },
       rows: currentSalesRows,
+      orders: filteredSalesOrders,
       topProductos: reports?.topProductos || []
     });
     showNotify('Reporte de Ventas descargado en PDF.');
   };
 
   const handleDownloadSalesCSV = () => {
-    const rows = currentSalesRows.map((r) => ({
-      Categoria_Temporal: salesPeriodMode.toUpperCase(),
-      Periodo: r.label || r.periodo,
-      Ordenes_Facturadas: Number(r.total_pedidos || 0),
-      Ingresos_Totales_COP: Number(r.ingresos || 0),
-      Ticket_Promedio_COP: r.total_pedidos > 0 ? Math.round(r.ingresos / r.total_pedidos) : 0
+    const summaryRows = currentSalesRows.map((r) => ({
+      Seccion: `CONSOLIDADO POR ${salesPeriodMode.toUpperCase()}`,
+      Periodo_o_Orden: r.label || r.periodo,
+      Cliente_o_Detalle: `${r.total_pedidos} órdenes facturadas`,
+      Materiales: 'Consolidado del periodo',
+      Metodo_Pago: '-',
+      Ticket_Promedio_COP: r.total_pedidos > 0 ? Math.round(r.ingresos / r.total_pedidos) : 0,
+      Ingresos_Totales_COP: Number(r.ingresos || 0)
     }));
-    exportToCSV(`FES_Reporte_Ventas_Por_${salesPeriodMode}`, rows);
+
+    const detailRows = filteredSalesOrders.map((o) => {
+      const { day, month, year } = extractDateParts(o.creado_en);
+      const pTag = salesPeriodMode === 'dia' ? day : salesPeriodMode === 'mes' ? month : year;
+      return {
+        Seccion: 'DETALLE DE ORDEN',
+        Periodo_o_Orden: `#${o.id} (${pTag})`,
+        Cliente_o_Detalle: o.cliente_nombre || 'Cliente Obra',
+        Materiales: (o.detalle || []).map((d) => `${d.cantidad}x ${d.nombre_producto}`).join(' | ') || 'Según pedido',
+        Metodo_Pago: o.metodo_pago || 'WhatsApp',
+        Ticket_Promedio_COP: Number(o.total || 0),
+        Ingresos_Totales_COP: Number(o.total || 0)
+      };
+    });
+
+    exportToCSV(`FES_Reporte_Ventas_Por_${salesPeriodMode}`, [...summaryRows, ...detailRows]);
     showNotify('Reporte de Ventas exportado a Excel (CSV).');
   };
 
   const handleDownloadMovementsPDF = () => {
     exportInventoryMovementsPDF({
       movements: filteredMovements,
-      filterLabel: getMovementsFilterLabel()
+      filterLabel: getMovementsFilterLabel(),
+      categorizedSummary: movFilterMode !== 'todos' ? (movementsCategorized[movFilterMode] || []) : []
     });
     showNotify('Historial de Entradas y Salidas descargado en PDF.');
   };
@@ -407,14 +440,14 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
     const rows = filteredMovements.map((m) => {
       const { day, month, year } = extractDateParts(m.fecha);
       return {
-        ID_Movimiento: m.id,
-        Fecha_Hora: new Date(m.fecha).toLocaleString('es-CO'),
+        ID_Movimiento: `#${m.id}`,
+        Fecha_Hora: m.fecha ? new Date(m.fecha).toLocaleString('es-CO') : 'Reciente',
         Dia: day,
         Mes: month,
         Anio: year,
         Tipo_Movimiento: (m.tipo || '').toUpperCase(),
         Material: m.nombre_producto || '',
-        Cantidad_Unidades: Number(m.cantidad || 0),
+        Cantidad_Unidades: `${m.tipo === 'entrada' ? '+' : '-'}${Number(m.cantidad || 0)}`,
         Nota_Control: m.nota || ''
       };
     });
@@ -1119,15 +1152,61 @@ export const AdminDashboard = ({ isOpen, onClose }) => {
                         <span>
                           <strong className="text-orange-400">{Number(tp.unidades_vendidas).toLocaleString('es-CO')}</strong> unidades
                         </span>
-                        {tp.ingresos_generados !== undefined && (
+                        {(tp.ingresos_producto !== undefined || tp.ingresos_generados !== undefined) && (
                           <span className="text-emerald-400 font-bold">
-                            ${Number(tp.ingresos_generados).toLocaleString('es-CO')} COP
+                            ${Number(tp.ingresos_producto ?? tp.ingresos_generados ?? 0).toLocaleString('es-CO')} COP
                           </span>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Detalle de Órdenes Facturadas en el Periodo */}
+              <div className="glass-panel rounded-2xl border border-slate-800 overflow-x-auto">
+                <div className="px-5 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                  <h3 className="font-heading font-bold text-sm text-white uppercase tracking-wider">
+                    Detalle de Órdenes Facturadas en el Periodo Seleccionado
+                  </h3>
+                  <span className="text-xs text-slate-400">
+                    {filteredSalesOrders.length} {filteredSalesOrders.length === 1 ? 'orden' : 'órdenes'}
+                  </span>
+                </div>
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900/60 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5"># Orden</th>
+                      <th className="p-3.5">Fecha y Hora</th>
+                      <th className="p-3.5">Cliente</th>
+                      <th className="p-3.5">Materiales</th>
+                      <th className="p-3.5">Método Pago</th>
+                      <th className="p-3.5">Estado</th>
+                      <th className="p-3.5 text-right">Total (COP)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                    {filteredSalesOrders.map((o) => (
+                      <tr key={o.id} className="hover:bg-slate-900/40">
+                        <td className="p-3.5 font-mono font-bold text-orange-400">#{o.id}</td>
+                        <td className="p-3.5 text-slate-300">{new Date(o.creado_en).toLocaleString('es-CO')}</td>
+                        <td className="p-3.5 font-bold text-white">{o.cliente_nombre || 'Cliente Obra'}</td>
+                        <td className="p-3.5 text-slate-300">
+                          {(o.detalle || []).map((d) => `${d.cantidad}x ${d.nombre_producto}`).join(', ') || 'Según orden'}
+                        </td>
+                        <td className="p-3.5 text-slate-400">{o.metodo_pago || 'WhatsApp'}</td>
+                        <td className="p-3.5">
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 font-semibold">
+                            {o.estado || 'Pendiente'}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right font-mono font-bold text-emerald-400">
+                          ${Number(o.total || 0).toLocaleString('es-CO')} COP
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
             </div>
